@@ -1,4 +1,3 @@
-#retencion/views.py
 from collections import defaultdict
 import re
 from datetime import date, datetime
@@ -265,6 +264,15 @@ def construir_trabajos_recientes(historial, limite=8):
 
     return trabajos
 
+
+def obtener_query_param(query_params, *nombres):
+    for nombre in nombres:
+        valor = query_params.get(nombre)
+        if valor not in (None, ""):
+            return valor
+    return None
+
+
 def aplicar_filtro_numerico(queryset, campo, operador, valor):
     if operador in (None, "") or valor in (None, ""):
         return queryset
@@ -285,6 +293,7 @@ def aplicar_filtro_numerico(queryset, campo, operador, valor):
         return queryset
 
     return queryset.filter(**{f"{campo}__{lookup}": numero})
+
 
 class OrdenServicioVentaDiautosViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = OrdenServicioVentaDiautosSerializer
@@ -309,31 +318,82 @@ class OrdenServicioVentaDiautosViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         queryset = OrdenServicioVentaDiautos.objects.all()
+        query_params = self.request.query_params
 
-        q = self.request.query_params.get("q")
-        vendedor = self.request.query_params.get("vendedor")
-        asesor = self.request.query_params.get("asesor")
-        estado_os = self.request.query_params.get("estado_os")
-        clasificacion = self.request.query_params.get("clasificacion")
-        marca_vehiculo = self.request.query_params.get("marca_vehiculo")
-        fecha_venta_desde = self.request.query_params.get("fecha_venta_desde")
-        fecha_venta_hasta = self.request.query_params.get("fecha_venta_hasta")
-        fecha_os_desde = self.request.query_params.get("fecha_os_desde")
-        fecha_os_hasta = self.request.query_params.get("fecha_os_hasta")
+        q = query_params.get("q")
+        vendedor = query_params.get("vendedor")
+        asesor = query_params.get("asesor")
+        estado_os = query_params.get("estado_os")
+        clasificacion = query_params.get("clasificacion")
+        marca_vehiculo = query_params.get("marca_vehiculo")
+        fecha_venta_desde = query_params.get("fecha_venta_desde")
+        fecha_venta_hasta = query_params.get("fecha_venta_hasta")
+        fecha_os_desde = query_params.get("fecha_os_desde")
+        fecha_os_hasta = query_params.get("fecha_os_hasta")
 
-        nombre_cte = self.request.query_params.get("nombre_cte")
-        numero_serie = self.request.query_params.get("numero_serie")
-        celular = self.request.query_params.get("celular")
-        email = self.request.query_params.get("email")
-        meses_desde = self.request.query_params.get("meses_desde")
-        meses_hasta = self.request.query_params.get("meses_hasta")
-        franja_retencion = self.request.query_params.get("franja_retencion")
-        estado_cliente = self.request.query_params.get("estado_cliente")
-        prioridad_prospeccion = self.request.query_params.get("prioridad_prospeccion")
-        dias_operador = self.request.query_params.get("dias_operador")
-        dias_valor = self.request.query_params.get("dias_valor")
-        meses_venta_operador = self.request.query_params.get("meses_venta_operador")
-        meses_venta_valor = self.request.query_params.get("meses_venta_valor")
+        nombre_cte = obtener_query_param(
+            query_params,
+            "nombre_cte",
+            "nombre",
+            "nombre_cte__icontains",
+            "nombre__icontains",
+        )
+        numero_serie = obtener_query_param(
+            query_params,
+            "numero_serie",
+            "vin",
+            "numero_serie__icontains",
+            "vin__icontains",
+        )
+        celular = obtener_query_param(
+            query_params,
+            "celular",
+            "celular__icontains",
+        )
+        email = obtener_query_param(
+            query_params,
+            "email",
+            "email__icontains",
+        )
+        meses_desde = obtener_query_param(query_params, "meses_desde", "mesesDesde")
+        meses_hasta = obtener_query_param(query_params, "meses_hasta", "mesesHasta")
+        franja_retencion = query_params.get("franja_retencion")
+        estado_cliente = query_params.get("estado_cliente")
+        prioridad_prospeccion = obtener_query_param(
+            query_params,
+            "prioridad_prospeccion",
+            "prioridadProspeccion",
+            "prioridad_prospeccion__iexact",
+        )
+
+        dias_operador = obtener_query_param(
+            query_params,
+            "dias_operador",
+            "operadorDiasIngreso",
+        )
+        dias_valor = obtener_query_param(
+            query_params,
+            "dias_valor",
+            "valorDiasIngreso",
+        )
+        meses_venta_operador = obtener_query_param(
+            query_params,
+            "meses_venta_operador",
+            "operadorMesesVenta",
+        )
+        meses_venta_valor = obtener_query_param(
+            query_params,
+            "meses_venta_valor",
+            "valorMesesVenta",
+        )
+
+        dias_gt = query_params.get("dias_os_a_actual__gt")
+        dias_lt = query_params.get("dias_os_a_actual__lt")
+        dias_exact = query_params.get("dias_os_a_actual__exact")
+
+        meses_gt = query_params.get("meses_actual_a_venta__gt")
+        meses_lt = query_params.get("meses_actual_a_venta__lt")
+        meses_exact = query_params.get("meses_actual_a_venta__exact")
 
         if q:
             queryset = queryset.filter(
@@ -405,25 +465,70 @@ class OrdenServicioVentaDiautosViewSet(viewsets.ReadOnlyModelViewSet):
 
         if estado_cliente:
             queryset = queryset.filter(estado_cliente__iexact=estado_cliente)
-       
+
         if prioridad_prospeccion:
             queryset = queryset.filter(
                 prioridad_prospeccion__iexact=prioridad_prospeccion
             )
 
-        queryset = aplicar_filtro_numerico(
-            queryset,
-            "dias_os_a_actual",
-            dias_operador,
-            dias_valor,
-        )
+        if dias_gt not in (None, ""):
+            queryset = aplicar_filtro_numerico(
+                queryset,
+                "dias_os_a_actual",
+                "mayor",
+                dias_gt,
+            )
+        elif dias_lt not in (None, ""):
+            queryset = aplicar_filtro_numerico(
+                queryset,
+                "dias_os_a_actual",
+                "menor",
+                dias_lt,
+            )
+        elif dias_exact not in (None, ""):
+            queryset = aplicar_filtro_numerico(
+                queryset,
+                "dias_os_a_actual",
+                "igual",
+                dias_exact,
+            )
+        else:
+            queryset = aplicar_filtro_numerico(
+                queryset,
+                "dias_os_a_actual",
+                dias_operador,
+                dias_valor,
+            )
 
-        queryset = aplicar_filtro_numerico(
-            queryset,
-            "meses_actual_a_venta",
-            meses_venta_operador,
-            meses_venta_valor,
-        )
+        if meses_gt not in (None, ""):
+            queryset = aplicar_filtro_numerico(
+                queryset,
+                "meses_actual_a_venta",
+                "mayor",
+                meses_gt,
+            )
+        elif meses_lt not in (None, ""):
+            queryset = aplicar_filtro_numerico(
+                queryset,
+                "meses_actual_a_venta",
+                "menor",
+                meses_lt,
+            )
+        elif meses_exact not in (None, ""):
+            queryset = aplicar_filtro_numerico(
+                queryset,
+                "meses_actual_a_venta",
+                "igual",
+                meses_exact,
+            )
+        else:
+            queryset = aplicar_filtro_numerico(
+                queryset,
+                "meses_actual_a_venta",
+                meses_venta_operador,
+                meses_venta_valor,
+            )
+
         return queryset
 
     @action(
@@ -506,9 +611,7 @@ class OrdenServicioVentaDiautosViewSet(viewsets.ReadOnlyModelViewSet):
 
         dias_desde_ultimo_historial = None
         if fecha_ultimo_historial:
-            dias_desde_ultimo_historial = (
-                date.today() - fecha_ultimo_historial
-            ).days
+            dias_desde_ultimo_historial = (date.today() - fecha_ultimo_historial).days
 
         return Response(
             {
