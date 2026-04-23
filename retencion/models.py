@@ -1,5 +1,5 @@
+#retencion/models.py
 from django.db import models
-
 
 class OrdenServicioVentaDiautos(models.Model):
     id = models.BigAutoField(primary_key=True)

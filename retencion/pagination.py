@@ -1,5 +1,5 @@
+#retencion/pagination.py
 from rest_framework.pagination import PageNumberPagination
-
 
 class RetencionPagination(PageNumberPagination):
     page_size = 500
