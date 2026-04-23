@@ -13,7 +13,7 @@ DEBUG = True
 ALLOWED_HOSTS = [
     "127.0.0.1",
     "localhost",
-    "crm-diautos.vercel.app"
+    "crmchevrolet.grupoautomotrizryr.com",
 ]
 
 INSTALLED_APPS = [
@@ -89,7 +89,9 @@ DATABASES = {
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
-    "https://crm-diautos.vercel.app"
+    "https://crm-diautos.vercel.app",
+    "https://grupoautomotrizryr.com",
+    "https://crmchevrolet.grupoautomotrizryr.com",
 ]
 
 # Déjalo en False para no abrir todo el backend.
@@ -103,6 +105,8 @@ CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "https://crm-diautos.vercel.app",
+    "https://grupoautomotrizryr.com/crm_chevrolet",
+    "https://grupoautomotrizryr.com"
 ]
 
 AUTH_PASSWORD_VALIDATORS = [
