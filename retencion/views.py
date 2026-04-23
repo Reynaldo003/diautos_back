@@ -1,3 +1,4 @@
+#retencion/views.py
 from collections import defaultdict
 import re
 from datetime import date, datetime
@@ -264,6 +265,26 @@ def construir_trabajos_recientes(historial, limite=8):
 
     return trabajos
 
+def aplicar_filtro_numerico(queryset, campo, operador, valor):
+    if operador in (None, "") or valor in (None, ""):
+        return queryset
+
+    numero = extraer_numero_entero(valor)
+    if numero is None:
+        return queryset
+
+    operador_normalizado = str(operador).strip().lower()
+    mapa_operadores = {
+        "mayor": "gt",
+        "menor": "lt",
+        "igual": "exact",
+    }
+    lookup = mapa_operadores.get(operador_normalizado)
+
+    if not lookup:
+        return queryset
+
+    return queryset.filter(**{f"{campo}__{lookup}": numero})
 
 class OrdenServicioVentaDiautosViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = OrdenServicioVentaDiautosSerializer
@@ -282,6 +303,7 @@ class OrdenServicioVentaDiautosViewSet(viewsets.ReadOnlyModelViewSet):
         "costo_os",
         "dias_os_a_actual",
         "meses_actual_a_venta",
+        "prioridad_prospeccion",
     ]
     ordering = ["-dias_os_a_actual", "-id"]
 
@@ -307,6 +329,11 @@ class OrdenServicioVentaDiautosViewSet(viewsets.ReadOnlyModelViewSet):
         meses_hasta = self.request.query_params.get("meses_hasta")
         franja_retencion = self.request.query_params.get("franja_retencion")
         estado_cliente = self.request.query_params.get("estado_cliente")
+        prioridad_prospeccion = self.request.query_params.get("prioridad_prospeccion")
+        dias_operador = self.request.query_params.get("dias_operador")
+        dias_valor = self.request.query_params.get("dias_valor")
+        meses_venta_operador = self.request.query_params.get("meses_venta_operador")
+        meses_venta_valor = self.request.query_params.get("meses_venta_valor")
 
         if q:
             queryset = queryset.filter(
@@ -325,6 +352,7 @@ class OrdenServicioVentaDiautosViewSet(viewsets.ReadOnlyModelViewSet):
                 | Q(estado_os__icontains=q)
                 | Q(clasificacion__icontains=q)
                 | Q(franja_retencion__icontains=q)
+                | Q(prioridad_prospeccion__icontains=q)
             )
 
         if vendedor:
@@ -377,7 +405,25 @@ class OrdenServicioVentaDiautosViewSet(viewsets.ReadOnlyModelViewSet):
 
         if estado_cliente:
             queryset = queryset.filter(estado_cliente__iexact=estado_cliente)
+       
+        if prioridad_prospeccion:
+            queryset = queryset.filter(
+                prioridad_prospeccion__iexact=prioridad_prospeccion
+            )
 
+        queryset = aplicar_filtro_numerico(
+            queryset,
+            "dias_os_a_actual",
+            dias_operador,
+            dias_valor,
+        )
+
+        queryset = aplicar_filtro_numerico(
+            queryset,
+            "meses_actual_a_venta",
+            meses_venta_operador,
+            meses_venta_valor,
+        )
         return queryset
 
     @action(
