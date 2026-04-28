@@ -1,7 +1,11 @@
-#retencion/serializers.py
+# retencion/serializers.py
 from rest_framework import serializers
 
-from .models import DetalleVentasPostVentaLimpia, OrdenServicioVentaDiautos
+from .models import (
+    DetalleVentasPostVentaLimpia,
+    OrdenServicioVentaDiautos,
+    RetencionComentario,
+)
 
 
 class OrdenServicioVentaDiautosSerializer(serializers.ModelSerializer):
@@ -58,3 +62,45 @@ class DetalleVentasPostVentaLimpiaSerializer(serializers.ModelSerializer):
     class Meta:
         model = DetalleVentasPostVentaLimpia
         fields = "__all__"
+
+
+class RetencionComentarioSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RetencionComentario
+        fields = [
+            "id",
+            "tipo",
+            "venta",
+            "vin",
+            "folio_factura",
+            "fecha_venta",
+            "id_os",
+            "comentario",
+            "creado_por",
+            "creado_en",
+            "actualizado_en",
+            "activo",
+        ]
+        read_only_fields = [
+            "id",
+            "tipo",
+            "venta",
+            "vin",
+            "folio_factura",
+            "fecha_venta",
+            "id_os",
+            "creado_por",
+            "creado_en",
+            "actualizado_en",
+            "activo",
+        ]
+
+    def validate_comentario(self, value):
+        texto = str(value or "").strip()
+        if not texto:
+            raise serializers.ValidationError("El comentario es obligatorio.")
+        if len(texto) > 2000:
+            raise serializers.ValidationError(
+                "El comentario no puede superar 2000 caracteres."
+            )
+        return texto

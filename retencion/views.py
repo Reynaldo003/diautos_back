@@ -4,15 +4,20 @@ import re
 from datetime import date, datetime
 
 from django.db.models import Q
-from rest_framework import filters, permissions, viewsets
+from rest_framework import filters, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from .models import DetalleVentasPostVentaLimpia, OrdenServicioVentaDiautos
+from .models import (
+    DetalleVentasPostVentaLimpia,
+    OrdenServicioVentaDiautos,
+    RetencionComentario,
+)
 from .pagination import RetencionPagination
 from .serializers import (
     DetalleVentasPostVentaLimpiaSerializer,
     OrdenServicioVentaDiautosSerializer,
+    RetencionComentarioSerializer,
 )
 
 
@@ -265,6 +270,84 @@ def construir_trabajos_recientes(historial, limite=8):
 
     return trabajos
 
+
+
+
+def obtener_nombre_usuario(request):
+    usuario = getattr(request, "user", None)
+
+    if usuario and getattr(usuario, "is_authenticated", False):
+        nombre_completo = " ".join(
+            parte for parte in [getattr(usuario, "first_name", ""), getattr(usuario, "last_name", "")] if parte
+        ).strip()
+        return nombre_completo or getattr(usuario, "username", "") or "Usuario CRM"
+
+    nombre_enviado = str(request.data.get("creado_por") or "").strip() if hasattr(request, "data") else ""
+    return nombre_enviado or "CRM Chevrolet"
+
+
+def obtener_comentarios_venta(registro):
+    vin = str(registro.numero_serie or "").strip()
+    folio = str(registro.folio_factura or "").strip()
+
+    filtro_busqueda = Q(venta_id=registro.id)
+    if vin and folio:
+        # Respaldo útil si en algún momento el origen se regenera y cambia el id técnico.
+        filtro_busqueda |= Q(vin__iexact=vin, folio_factura__iexact=folio)
+
+    return (
+        RetencionComentario.objects.filter(
+            activo=True,
+            tipo=RetencionComentario.TipoComentario.VENTA,
+        )
+        .filter(filtro_busqueda)
+        .distinct()
+        .order_by("-creado_en", "-id")
+    )
+
+
+def obtener_comentarios_os_por_vin(vin):
+    vin_limpio = str(vin or "").strip()
+    if not vin_limpio:
+        return RetencionComentario.objects.none()
+
+    return RetencionComentario.objects.filter(
+        activo=True,
+        tipo=RetencionComentario.TipoComentario.ORDEN_SERVICIO,
+        vin__iexact=vin_limpio,
+    ).order_by("-creado_en", "-id")
+
+
+def crear_comentario_desde_registro(request, registro, tipo, id_os=None):
+    comentario = str(request.data.get("comentario") or "").strip()
+
+    if not comentario:
+        return None, Response(
+            {"comentario": ["El comentario es obligatorio."]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if len(comentario) > 2000:
+        return None, Response(
+            {"comentario": ["El comentario no puede superar 2000 caracteres."]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    vin = str(registro.numero_serie or "").strip()
+    id_os_limpio = str(id_os or registro.id_os or "").strip()
+
+    nuevo = RetencionComentario.objects.create(
+        tipo=tipo,
+        venta=registro,
+        vin=vin,
+        folio_factura=registro.folio_factura,
+        fecha_venta=registro.fecha_venta,
+        id_os=id_os_limpio or None,
+        comentario=comentario,
+        creado_por=obtener_nombre_usuario(request),
+    )
+
+    return nuevo, None
 
 def obtener_query_param(query_params, *nombres):
     for nombre in nombres:
@@ -635,9 +718,91 @@ class OrdenServicioVentaDiautosViewSet(viewsets.ReadOnlyModelViewSet):
                     kilometraje_actual=registro.kilometraje,
                 ),
                 "trabajos_recientes": construir_trabajos_recientes(historial_ordenado),
+                "comentarios_venta": RetencionComentarioSerializer(
+                    obtener_comentarios_venta(registro),
+                    many=True,
+                ).data,
+                "comentarios_os": RetencionComentarioSerializer(
+                    obtener_comentarios_os_por_vin(vin),
+                    many=True,
+                ).data,
                 "historial": DetalleVentasPostVentaLimpiaSerializer(
                     historial_ordenado,
                     many=True,
                 ).data,
             }
         )
+
+    @action(
+        detail=True,
+        methods=["get", "post"],
+        url_path="comentarios",
+        permission_classes=[permissions.AllowAny],
+        authentication_classes=[],
+    )
+    def comentarios(self, request, pk=None):
+        """
+        Comentarios generales de la venta seleccionada.
+
+        GET  /api/ordenes-servicio-ventas/{id}/comentarios/
+        POST /api/ordenes-servicio-ventas/{id}/comentarios/ {"comentario": "Texto"}
+        """
+        registro = self.get_object()
+
+        if request.method == "GET":
+            serializer = RetencionComentarioSerializer(
+                obtener_comentarios_venta(registro),
+                many=True,
+            )
+            return Response(serializer.data)
+
+        nuevo, respuesta_error = crear_comentario_desde_registro(
+            request=request,
+            registro=registro,
+            tipo=RetencionComentario.TipoComentario.VENTA,
+        )
+        if respuesta_error:
+            return respuesta_error
+
+        return Response(
+            RetencionComentarioSerializer(nuevo).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(
+        detail=True,
+        methods=["get", "post"],
+        url_path="comentarios-os",
+        permission_classes=[permissions.AllowAny],
+        authentication_classes=[],
+    )
+    def comentarios_os(self, request, pk=None):
+        """
+        Endpoint preparado para comentarios por orden de servicio.
+        Para POST envía: {"id_os": "IO00000484", "comentario": "Texto"}
+        """
+        registro = self.get_object()
+        vin = str(registro.numero_serie or "").strip()
+        id_os = str(request.data.get("id_os") or request.query_params.get("id_os") or registro.id_os or "").strip()
+
+        if request.method == "GET":
+            queryset = obtener_comentarios_os_por_vin(vin)
+            if id_os:
+                queryset = queryset.filter(id_os__iexact=id_os)
+
+            return Response(RetencionComentarioSerializer(queryset, many=True).data)
+
+        nuevo, respuesta_error = crear_comentario_desde_registro(
+            request=request,
+            registro=registro,
+            tipo=RetencionComentario.TipoComentario.ORDEN_SERVICIO,
+            id_os=id_os,
+        )
+        if respuesta_error:
+            return respuesta_error
+
+        return Response(
+            RetencionComentarioSerializer(nuevo).data,
+            status=status.HTTP_201_CREATED,
+        )
+

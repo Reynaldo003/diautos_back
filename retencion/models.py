@@ -129,3 +129,55 @@ class DetalleVentasPostVentaLimpia(models.Model):
 
     def __str__(self):
         return f"{self.ore_idorden} - {self.ore_numserie}"
+
+# Agrega este modelo al final de retencion/models.py
+
+class RetencionComentario(models.Model):
+    class TipoComentario(models.TextChoices):
+        VENTA = "VENTA", "Venta"
+        ORDEN_SERVICIO = "OS", "Orden de servicio"
+
+    id = models.BigAutoField(primary_key=True)
+
+    # Para comentarios generales de venta se llena venta.
+    # db_constraint=False evita crear FK física contra una tabla existente/no administrada.
+    venta = models.ForeignKey(
+        OrdenServicioVentaDiautos,
+        null=True,
+        blank=True,
+        on_delete=models.DO_NOTHING,
+        related_name="comentarios_retencion",
+        db_constraint=False,
+    )
+
+    # Campos de respaldo para mantener trazabilidad aunque el origen se regenere por ETL.
+    tipo = models.CharField(
+        max_length=20,
+        choices=TipoComentario.choices,
+        default=TipoComentario.VENTA,
+        db_index=True,
+    )
+    vin = models.CharField(max_length=150, db_index=True)
+    folio_factura = models.CharField(max_length=50, null=True, blank=True, db_index=True)
+    fecha_venta = models.DateField(null=True, blank=True, db_index=True)
+    id_os = models.CharField(max_length=50, null=True, blank=True, db_index=True)
+
+    comentario = models.TextField()
+    creado_por = models.CharField(max_length=150, default="CRM Chevrolet")
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+    activo = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "retencion_comentarios"
+        managed = True
+        ordering = ["-creado_en", "-id"]
+        indexes = [
+            models.Index(fields=["tipo", "venta"]),
+            models.Index(fields=["tipo", "vin", "folio_factura"]),
+            models.Index(fields=["tipo", "vin", "id_os"]),
+            models.Index(fields=["-creado_en"]),
+        ]
+
+    def __str__(self):
+        return f"{self.tipo} - {self.vin} - {self.creado_en:%Y-%m-%d %H:%M}"
