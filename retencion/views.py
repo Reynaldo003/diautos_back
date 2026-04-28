@@ -383,7 +383,7 @@ class OrdenServicioVentaDiautosViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = OrdenServicioVentaDiautosSerializer
     permission_classes = [permissions.AllowAny]
     authentication_classes = []
-    http_method_names = ["get", "head", "options"]
+    http_method_names = ["get", "post", "head", "options"]
     pagination_class = RetencionPagination
 
     filter_backends = [filters.OrderingFilter]
