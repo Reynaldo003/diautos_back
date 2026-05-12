@@ -30,6 +30,7 @@ INSTALLED_APPS = [
 
     "retencion",
     "usuarios",
+    "cartera",
 ]
 
 MIDDLEWARE = [
