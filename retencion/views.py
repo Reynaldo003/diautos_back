@@ -1,13 +1,9 @@
-# retencion/views.py
+#retencion/views.py
 from collections import defaultdict
-import hashlib
-import logging
 import re
-import time
 from datetime import date, datetime
 
-from django.core.cache import cache
-from django.db.models import Count, Q
+from django.db.models import Q
 from rest_framework import filters, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -23,85 +19,6 @@ from .serializers import (
     OrdenServicioVentaDiautosSerializer,
     RetencionComentarioSerializer,
 )
-
-
-logger = logging.getLogger(__name__)
-
-
-# =========================
-# Configuración de caché
-# =========================
-CACHE_TIMEOUT_LISTADO = 120        # 2 minutos
-CACHE_TIMEOUT_ESTADISTICAS = 300   # 5 minutos
-CACHE_TIMEOUT_DETALLE_SQL = 300    # 5 minutos
-
-VERSION_CACHE_RETENCION = "v2"
-
-
-# Campos que realmente se usan en el listado principal.
-# Esto evita traer columnas innecesarias desde SQL Server.
-CAMPOS_ORDEN_LISTADO = [
-    "id",
-    "nombre_cte",
-    "telefono",
-    "celular",
-    "email",
-    "marca_vehiculo",
-    "version",
-    "ano_modelo",
-    "numero_serie",
-    "importe_factura",
-    "importe_costo_base",
-    "importe_iva",
-    "importe_isan",
-    "importe_bonificacion",
-    "tipo_movimiento",
-    "vendedor",
-    "fecha_venta",
-    "folio_factura",
-    "condicion_pago",
-    "fecha_os",
-    "id_os",
-    "tipo_orden_servicio",
-    "asesor",
-    "transaccion",
-    "clasificacion",
-    "estado_os",
-    "descripcion_os",
-    "costo_os",
-    "condicion_vehiculo",
-    "estado_cliente",
-    "dias_os_a_actual",
-    "prioridad_prospeccion",
-    "franja_retencion",
-    "meses_actual_a_venta",
-    "kilometraje",
-]
-
-
-CAMPOS_HISTORIAL_DETALLE = [
-    "ore_idorden",
-    "ore_numserie",
-    "ore_fechaord",
-    "ore_fechacie",
-    "vte_fechdocto",
-    "fecha_factura",
-    "ore_fechaprom",
-    "ore_kilometraje",
-    "asesor",
-    "tecnico",
-    "ord_descrip",
-    "ord_referencia2",
-    "clasificacion",
-    "tiporden",
-    "desc_auto",
-    "ord_costo",
-    "ord_subtotal",
-    "ore_observaciones",
-    "nombre_cte",
-    "veh_noplacas",
-    "veh_anmodelo",
-]
 
 
 SERVICIOS_COMERCIALES = [
@@ -160,33 +77,6 @@ SERVICIOS_COMERCIALES = [
         "intervalo_dias": 180,
     },
 ]
-
-
-def generar_cache_key(prefijo, request=None, extra=""):
-    """
-    Genera una clave estable de caché.
-
-    Usamos el full_path porque incluye:
-    - endpoint
-    - query params
-    - page
-    - page_size
-    - ordering
-    - filtros
-    """
-    base = f"{VERSION_CACHE_RETENCION}:{prefijo}:{extra}"
-
-    if request is not None:
-        base += f":{request.get_full_path()}"
-
-    hash_key = hashlib.md5(base.encode("utf-8")).hexdigest()
-    return f"retencion:{prefijo}:{hash_key}"
-
-
-def medir_tiempo(nombre_operacion, inicio):
-    tiempo = time.perf_counter() - inicio
-    logger.warning("RETENCION | %s | %.3fs", nombre_operacion, tiempo)
-    return tiempo
 
 
 def obtener_modelo_desde_version(version: str) -> str:
@@ -309,7 +199,6 @@ def construir_resumen_servicios(historial, kilometraje_actual=None):
 
         km_ultimo = extraer_numero_entero(ultimo.ore_kilometraje)
         km_recorridos = None
-
         if (
             kilometraje_actual_num is not None
             and km_ultimo is not None
@@ -367,7 +256,6 @@ def construir_trabajos_recientes(historial, limite=8):
             continue
 
         vistos.add(descripcion_normalizada)
-
         trabajos.append(
             {
                 "descripcion": descripcion,
@@ -383,27 +271,18 @@ def construir_trabajos_recientes(historial, limite=8):
     return trabajos
 
 
+
+
 def obtener_nombre_usuario(request):
     usuario = getattr(request, "user", None)
 
     if usuario and getattr(usuario, "is_authenticated", False):
         nombre_completo = " ".join(
-            parte
-            for parte in [
-                getattr(usuario, "first_name", ""),
-                getattr(usuario, "last_name", ""),
-            ]
-            if parte
+            parte for parte in [getattr(usuario, "first_name", ""), getattr(usuario, "last_name", "")] if parte
         ).strip()
-
         return nombre_completo or getattr(usuario, "username", "") or "Usuario CRM"
 
-    nombre_enviado = (
-        str(request.data.get("creado_por") or "").strip()
-        if hasattr(request, "data")
-        else ""
-    )
-
+    nombre_enviado = str(request.data.get("creado_por") or "").strip() if hasattr(request, "data") else ""
     return nombre_enviado or "CRM Chevrolet"
 
 
@@ -412,8 +291,8 @@ def obtener_comentarios_venta(registro):
     folio = str(registro.folio_factura or "").strip()
 
     filtro_busqueda = Q(venta_id=registro.id)
-
     if vin and folio:
+        # Respaldo útil si en algún momento el origen se regenera y cambia el id técnico.
         filtro_busqueda |= Q(vin__iexact=vin, folio_factura__iexact=folio)
 
     return (
@@ -429,7 +308,6 @@ def obtener_comentarios_venta(registro):
 
 def obtener_comentarios_os_por_vin(vin):
     vin_limpio = str(vin or "").strip()
-
     if not vin_limpio:
         return RetencionComentario.objects.none()
 
@@ -471,13 +349,11 @@ def crear_comentario_desde_registro(request, registro, tipo, id_os=None):
 
     return nuevo, None
 
-
 def obtener_query_param(query_params, *nombres):
     for nombre in nombres:
         valor = query_params.get(nombre)
         if valor not in (None, ""):
             return valor
-
     return None
 
 
@@ -486,81 +362,21 @@ def aplicar_filtro_numerico(queryset, campo, operador, valor):
         return queryset
 
     numero = extraer_numero_entero(valor)
-
     if numero is None:
         return queryset
 
     operador_normalizado = str(operador).strip().lower()
-
     mapa_operadores = {
         "mayor": "gt",
         "menor": "lt",
         "igual": "exact",
     }
-
     lookup = mapa_operadores.get(operador_normalizado)
 
     if not lookup:
         return queryset
 
     return queryset.filter(**{f"{campo}__{lookup}": numero})
-
-
-def aplicar_busqueda_general(queryset, q):
-    """
-    Evitamos hacer búsquedas muy agresivas con 1 o 2 caracteres porque eso
-    obliga a SQL Server a escanear demasiados registros.
-
-    También separamos búsqueda probable por VIN/folio/teléfono para reducir ORs.
-    """
-    texto = str(q or "").strip()
-
-    if not texto:
-        return queryset
-
-    if len(texto) < 3:
-        return queryset
-
-    texto_sin_espacios = re.sub(r"\s+", "", texto)
-    solo_digitos = re.sub(r"[^\d]", "", texto)
-    parece_vin_o_folio = len(texto_sin_espacios) >= 8 and " " not in texto
-    parece_telefono = len(solo_digitos) >= 7
-
-    if parece_vin_o_folio or parece_telefono:
-        return queryset.filter(
-            Q(numero_serie__icontains=texto)
-            | Q(folio_factura__icontains=texto)
-            | Q(id_os__icontains=texto)
-            | Q(telefono__icontains=texto)
-            | Q(celular__icontains=texto)
-        )
-
-    return queryset.filter(
-        Q(nombre_cte__icontains=texto)
-        | Q(email__icontains=texto)
-        | Q(marca_vehiculo__icontains=texto)
-        | Q(version__icontains=texto)
-        | Q(vendedor__icontains=texto)
-        | Q(asesor__icontains=texto)
-        | Q(estado_os__icontains=texto)
-        | Q(clasificacion__icontains=texto)
-        | Q(franja_retencion__icontains=texto)
-        | Q(prioridad_prospeccion__icontains=texto)
-    )
-
-
-def filtrar_vin(queryset, numero_serie):
-    vin = str(numero_serie or "").strip()
-
-    if not vin:
-        return queryset
-
-    # Si viene un VIN completo o casi completo, conviene buscar exacto.
-    # En SQL Server normalmente la collation ya es case-insensitive.
-    if len(vin) >= 17:
-        return queryset.filter(numero_serie=vin)
-
-    return queryset.filter(numero_serie__icontains=vin)
 
 
 class OrdenServicioVentaDiautosViewSet(viewsets.ReadOnlyModelViewSet):
@@ -585,7 +401,7 @@ class OrdenServicioVentaDiautosViewSet(viewsets.ReadOnlyModelViewSet):
     ordering = ["-dias_os_a_actual", "-id"]
 
     def get_queryset(self):
-        queryset = OrdenServicioVentaDiautos.objects.only(*CAMPOS_ORDEN_LISTADO)
+        queryset = OrdenServicioVentaDiautos.objects.all()
         query_params = self.request.query_params
 
         q = query_params.get("q")
@@ -623,16 +439,8 @@ class OrdenServicioVentaDiautosViewSet(viewsets.ReadOnlyModelViewSet):
             "email",
             "email__icontains",
         )
-        meses_desde = obtener_query_param(
-            query_params,
-            "meses_desde",
-            "mesesDesde",
-        )
-        meses_hasta = obtener_query_param(
-            query_params,
-            "meses_hasta",
-            "mesesHasta",
-        )
+        meses_desde = obtener_query_param(query_params, "meses_desde", "mesesDesde")
+        meses_hasta = obtener_query_param(query_params, "meses_hasta", "mesesHasta")
         franja_retencion = query_params.get("franja_retencion")
         estado_cliente = query_params.get("estado_cliente")
         prioridad_prospeccion = obtener_query_param(
@@ -671,7 +479,25 @@ class OrdenServicioVentaDiautosViewSet(viewsets.ReadOnlyModelViewSet):
         meses_lt = query_params.get("meses_actual_a_venta__lt")
         meses_exact = query_params.get("meses_actual_a_venta__exact")
 
-        queryset = aplicar_busqueda_general(queryset, q)
+        if q:
+            queryset = queryset.filter(
+                Q(nombre_cte__icontains=q)
+                | Q(telefono__icontains=q)
+                | Q(celular__icontains=q)
+                | Q(email__icontains=q)
+                | Q(marca_vehiculo__icontains=q)
+                | Q(version__icontains=q)
+                | Q(numero_serie__icontains=q)
+                | Q(vendedor__icontains=q)
+                | Q(asesor__icontains=q)
+                | Q(folio_factura__icontains=q)
+                | Q(id_os__icontains=q)
+                | Q(tipo_orden_servicio__icontains=q)
+                | Q(estado_os__icontains=q)
+                | Q(clasificacion__icontains=q)
+                | Q(franja_retencion__icontains=q)
+                | Q(prioridad_prospeccion__icontains=q)
+            )
 
         if vendedor:
             queryset = queryset.filter(vendedor__icontains=vendedor)
@@ -704,7 +530,7 @@ class OrdenServicioVentaDiautosViewSet(viewsets.ReadOnlyModelViewSet):
             queryset = queryset.filter(nombre_cte__icontains=nombre_cte)
 
         if numero_serie:
-            queryset = filtrar_vin(queryset, numero_serie)
+            queryset = queryset.filter(numero_serie__icontains=numero_serie)
 
         if celular:
             queryset = queryset.filter(celular__icontains=celular)
@@ -789,30 +615,6 @@ class OrdenServicioVentaDiautosViewSet(viewsets.ReadOnlyModelViewSet):
 
         return queryset
 
-    def list(self, request, *args, **kwargs):
-        """
-        Cachea el listado completo ya paginado.
-        Esto ayuda mucho cuando el usuario cambia de vista, vuelve a entrar
-        o cuando el front vuelve a pedir la misma página con los mismos filtros.
-        """
-        inicio_total = time.perf_counter()
-        cache_key = generar_cache_key("listado", request=request)
-
-        datos_cache = cache.get(cache_key)
-        if datos_cache is not None:
-            response = Response(datos_cache)
-            response["X-Cache"] = "HIT"
-            return response
-
-        response = super().list(request, *args, **kwargs)
-
-        cache.set(cache_key, response.data, timeout=CACHE_TIMEOUT_LISTADO)
-
-        response["X-Cache"] = "MISS"
-        medir_tiempo("listado_total", inicio_total)
-
-        return response
-
     @action(
         detail=False,
         methods=["get"],
@@ -821,32 +623,11 @@ class OrdenServicioVentaDiautosViewSet(viewsets.ReadOnlyModelViewSet):
         authentication_classes=[],
     )
     def estadisticas(self, request):
-        """
-        Optimizado:
-        - Cache por filtros.
-        - Menos filas enviadas desde SQL Server.
-        - Agrupación por version/estado en SQL en lugar de traer todo crudo.
-        """
-        inicio_total = time.perf_counter()
-        cache_key = generar_cache_key("estadisticas", request=request)
-
-        datos_cache = cache.get(cache_key)
-        if datos_cache is not None:
-            response = Response(datos_cache)
-            response["X-Cache"] = "HIT"
-            return response
-
         queryset = self.filter_queryset(self.get_queryset())
 
         total = queryset.count()
-
-        conteos_estado = queryset.aggregate(
-            activos=Count("id", filter=Q(estado_cliente__iexact="ACTIVO")),
-            inactivos=Count("id", filter=Q(estado_cliente__iexact="INACTIVO")),
-        )
-
-        activos = conteos_estado.get("activos") or 0
-        inactivos = conteos_estado.get("inactivos") or 0
+        activos = queryset.filter(estado_cliente__iexact="ACTIVO").count()
+        inactivos = queryset.filter(estado_cliente__iexact="INACTIVO").count()
 
         porcentaje_retorno = round((activos / total) * 100, 2) if total else 0
 
@@ -854,23 +635,14 @@ class OrdenServicioVentaDiautosViewSet(viewsets.ReadOnlyModelViewSet):
             lambda: {"nombre": "", "activo": 0, "inactivo": 0}
         )
 
-        filas_modelos = (
-            queryset.values("version", "estado_cliente")
-            .annotate(total=Count("id"))
-            .order_by()
-        )
-
-        for item in filas_modelos:
-            modelo = obtener_modelo_desde_version(item.get("version"))
-            estado = str(item.get("estado_cliente") or "").upper()
-            cantidad = item.get("total") or 0
-
+        for version, estado in queryset.values_list("version", "estado_cliente"):
+            modelo = obtener_modelo_desde_version(version)
             acumulado_modelos[modelo]["nombre"] = modelo
 
-            if estado == "ACTIVO":
-                acumulado_modelos[modelo]["activo"] += cantidad
+            if str(estado or "").upper() == "ACTIVO":
+                acumulado_modelos[modelo]["activo"] += 1
             else:
-                acumulado_modelos[modelo]["inactivo"] += cantidad
+                acumulado_modelos[modelo]["inactivo"] += 1
 
         modelos = sorted(
             acumulado_modelos.values(),
@@ -878,22 +650,15 @@ class OrdenServicioVentaDiautosViewSet(viewsets.ReadOnlyModelViewSet):
             reverse=True,
         )[:10]
 
-        respuesta = {
-            "porcentaje_retorno": porcentaje_retorno,
-            "vines_segmento": total,
-            "vines_activos": activos,
-            "vines_inactivos": inactivos,
-            "modelos": modelos,
-        }
-
-        cache.set(cache_key, respuesta, timeout=CACHE_TIMEOUT_ESTADISTICAS)
-
-        response = Response(respuesta)
-        response["X-Cache"] = "MISS"
-
-        medir_tiempo("estadisticas_total", inicio_total)
-
-        return response
+        return Response(
+            {
+                "porcentaje_retorno": porcentaje_retorno,
+                "vines_segmento": total,
+                "vines_activos": activos,
+                "vines_inactivos": inactivos,
+                "modelos": modelos,
+            }
+        )
 
     @action(
         detail=True,
@@ -903,69 +668,37 @@ class OrdenServicioVentaDiautosViewSet(viewsets.ReadOnlyModelViewSet):
         authentication_classes=[],
     )
     def detalle_comercial(self, request, pk=None):
-        """
-        Cacheamos solo la parte pesada que viene de SQL Server:
-        - historial
-        - resumen
-        - servicios relevantes
-        - trabajos recientes
-
-        Los comentarios se consultan frescos para que al guardar un comentario
-        no se quede oculto por el caché.
-        """
-        inicio_total = time.perf_counter()
-
         registro = self.get_object()
         vin = str(registro.numero_serie or "").strip()
 
-        cache_key = generar_cache_key(
-            "detalle_sql",
-            extra=f"{registro.id}:{vin}",
+        historial_qs = DetalleVentasPostVentaLimpia.objects.none()
+        if vin:
+            historial_qs = DetalleVentasPostVentaLimpia.objects.filter(
+                ore_numserie__iexact=vin
+            ).order_by("-ore_fechaord", "-ore_fechacie", "-vte_fechdocto", "-ore_idorden")
+
+        historial = list(historial_qs[:250])
+
+        historial_ordenado = sorted(
+            historial,
+            key=lambda item: (
+                obtener_fecha_postventa(item) or date.min,
+                str(item.ore_idorden or ""),
+            ),
+            reverse=True,
         )
 
-        datos_sql_cache = cache.get(cache_key)
+        ultimo_registro = historial_ordenado[0] if historial_ordenado else None
+        fecha_ultimo_historial = (
+            obtener_fecha_postventa(ultimo_registro) if ultimo_registro else None
+        )
 
-        if datos_sql_cache is None:
-            historial_qs = DetalleVentasPostVentaLimpia.objects.none()
+        dias_desde_ultimo_historial = None
+        if fecha_ultimo_historial:
+            dias_desde_ultimo_historial = (date.today() - fecha_ultimo_historial).days
 
-            if vin:
-                historial_qs = (
-                    DetalleVentasPostVentaLimpia.objects.only(*CAMPOS_HISTORIAL_DETALLE)
-                    .filter(ore_numserie=vin)
-                    .order_by(
-                        "-ore_fechaord",
-                        "-ore_fechacie",
-                        "-vte_fechdocto",
-                        "-ore_idorden",
-                    )
-                )
-
-            historial = list(historial_qs[:250])
-
-            historial_ordenado = sorted(
-                historial,
-                key=lambda item: (
-                    obtener_fecha_postventa(item) or date.min,
-                    str(item.ore_idorden or ""),
-                ),
-                reverse=True,
-            )
-
-            ultimo_registro = historial_ordenado[0] if historial_ordenado else None
-
-            fecha_ultimo_historial = (
-                obtener_fecha_postventa(ultimo_registro)
-                if ultimo_registro
-                else None
-            )
-
-            dias_desde_ultimo_historial = None
-            if fecha_ultimo_historial:
-                dias_desde_ultimo_historial = (
-                    date.today() - fecha_ultimo_historial
-                ).days
-
-            datos_sql_cache = {
+        return Response(
+            {
                 "registro": OrdenServicioVentaDiautosSerializer(registro).data,
                 "resumen": {
                     "vin": vin,
@@ -974,59 +707,31 @@ class OrdenServicioVentaDiautosViewSet(viewsets.ReadOnlyModelViewSet):
                     "dias_desde_ultimo_historial": dias_desde_ultimo_historial,
                     "dias_os_a_actual": registro.dias_os_a_actual,
                     "ultimo_kilometraje_historial": (
-                        ultimo_registro.ore_kilometraje
-                        if ultimo_registro
-                        else None
+                        ultimo_registro.ore_kilometraje if ultimo_registro else None
                     ),
-                    "ultimo_asesor": (
-                        ultimo_registro.asesor if ultimo_registro else None
-                    ),
-                    "ultimo_tecnico": (
-                        ultimo_registro.tecnico if ultimo_registro else None
-                    ),
-                    "ultima_orden": (
-                        ultimo_registro.ore_idorden if ultimo_registro else None
-                    ),
+                    "ultimo_asesor": ultimo_registro.asesor if ultimo_registro else None,
+                    "ultimo_tecnico": ultimo_registro.tecnico if ultimo_registro else None,
+                    "ultima_orden": ultimo_registro.ore_idorden if ultimo_registro else None,
                 },
                 "servicios_relevantes": construir_resumen_servicios(
                     historial=historial_ordenado,
                     kilometraje_actual=registro.kilometraje,
                 ),
                 "trabajos_recientes": construir_trabajos_recientes(historial_ordenado),
+                "comentarios_venta": RetencionComentarioSerializer(
+                    obtener_comentarios_venta(registro),
+                    many=True,
+                ).data,
+                "comentarios_os": RetencionComentarioSerializer(
+                    obtener_comentarios_os_por_vin(vin),
+                    many=True,
+                ).data,
                 "historial": DetalleVentasPostVentaLimpiaSerializer(
                     historial_ordenado,
                     many=True,
                 ).data,
             }
-
-            cache.set(
-                cache_key,
-                datos_sql_cache,
-                timeout=CACHE_TIMEOUT_DETALLE_SQL,
-            )
-
-            estado_cache = "MISS"
-        else:
-            estado_cache = "HIT"
-
-        respuesta = {
-            **datos_sql_cache,
-            "comentarios_venta": RetencionComentarioSerializer(
-                obtener_comentarios_venta(registro),
-                many=True,
-            ).data,
-            "comentarios_os": RetencionComentarioSerializer(
-                obtener_comentarios_os_por_vin(vin),
-                many=True,
-            ).data,
-        }
-
-        response = Response(respuesta)
-        response["X-Cache-Detalle-SQL"] = estado_cache
-
-        medir_tiempo("detalle_comercial_total", inicio_total)
-
-        return response
+        )
 
     @action(
         detail=True,
@@ -1036,6 +741,12 @@ class OrdenServicioVentaDiautosViewSet(viewsets.ReadOnlyModelViewSet):
         authentication_classes=[],
     )
     def comentarios(self, request, pk=None):
+        """
+        Comentarios generales de la venta seleccionada.
+
+        GET  /api/ordenes-servicio-ventas/{id}/comentarios/
+        POST /api/ordenes-servicio-ventas/{id}/comentarios/ {"comentario": "Texto"}
+        """
         registro = self.get_object()
 
         if request.method == "GET":
@@ -1050,7 +761,6 @@ class OrdenServicioVentaDiautosViewSet(viewsets.ReadOnlyModelViewSet):
             registro=registro,
             tipo=RetencionComentario.TipoComentario.VENTA,
         )
-
         if respuesta_error:
             return respuesta_error
 
@@ -1067,24 +777,20 @@ class OrdenServicioVentaDiautosViewSet(viewsets.ReadOnlyModelViewSet):
         authentication_classes=[],
     )
     def comentarios_os(self, request, pk=None):
+        """
+        Endpoint preparado para comentarios por orden de servicio.
+        Para POST envía: {"id_os": "IO00000484", "comentario": "Texto"}
+        """
         registro = self.get_object()
         vin = str(registro.numero_serie or "").strip()
-        id_os = str(
-            request.data.get("id_os")
-            or request.query_params.get("id_os")
-            or registro.id_os
-            or ""
-        ).strip()
+        id_os = str(request.data.get("id_os") or request.query_params.get("id_os") or registro.id_os or "").strip()
 
         if request.method == "GET":
             queryset = obtener_comentarios_os_por_vin(vin)
-
             if id_os:
                 queryset = queryset.filter(id_os__iexact=id_os)
 
-            return Response(
-                RetencionComentarioSerializer(queryset, many=True).data
-            )
+            return Response(RetencionComentarioSerializer(queryset, many=True).data)
 
         nuevo, respuesta_error = crear_comentario_desde_registro(
             request=request,
@@ -1092,7 +798,6 @@ class OrdenServicioVentaDiautosViewSet(viewsets.ReadOnlyModelViewSet):
             tipo=RetencionComentario.TipoComentario.ORDEN_SERVICIO,
             id_os=id_os,
         )
-
         if respuesta_error:
             return respuesta_error
 
@@ -1100,3 +805,4 @@ class OrdenServicioVentaDiautosViewSet(viewsets.ReadOnlyModelViewSet):
             RetencionComentarioSerializer(nuevo).data,
             status=status.HTTP_201_CREATED,
         )
+
