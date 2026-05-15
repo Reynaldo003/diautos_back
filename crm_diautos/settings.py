@@ -14,6 +14,7 @@ ALLOWED_HOSTS = [
     "127.0.0.1",
     "localhost",
     "crmchevrolet.grupoautomotrizryr.com",
+    "encuesta-satisfaccion-postventa-dia.vercel.app",
 ]
 
 INSTALLED_APPS = [
@@ -31,6 +32,7 @@ INSTALLED_APPS = [
     "retencion",
     "usuarios",
     "cartera",
+    "encuestas",
 ]
 
 MIDDLEWARE = [
@@ -94,6 +96,7 @@ CORS_ALLOWED_ORIGINS = [
     "https://crm-diautos.vercel.app",
     "https://grupoautomotrizryr.com",
     "https://crmchevrolet.grupoautomotrizryr.com",
+    "https://encuesta-satisfaccion-postventa-dia.vercel.app"
 ]
 
 # Déjalo en False para no abrir todo el backend.
@@ -108,7 +111,8 @@ CSRF_TRUSTED_ORIGINS = [
     "http://127.0.0.1:5173",
     "https://crm-diautos.vercel.app",
     "https://grupoautomotrizryr.com/crm_chevrolet",
-    "https://grupoautomotrizryr.com"
+    "https://grupoautomotrizryr.com",
+    "https://encuesta-satisfaccion-postventa-dia.vercel.app"
 ]
 
 AUTH_PASSWORD_VALIDATORS = [
