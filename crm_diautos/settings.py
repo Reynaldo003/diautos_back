@@ -13,6 +13,7 @@ DEBUG = True
 ALLOWED_HOSTS = [
     "127.0.0.1",
     "localhost",
+    "grupoautomotrizryr.com",
     "crmchevrolet.grupoautomotrizryr.com",
     "encuesta-satisfaccion-postventa-dia.vercel.app",
 ]
@@ -97,6 +98,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:5173",
     "https://crm-diautos.vercel.app",
     "https://grupoautomotrizryr.com",
+    "https://grupoautomotrizryr.com/crm_chevrolet",
     "https://crmchevrolet.grupoautomotrizryr.com",
     "https://encuesta-satisfaccion-postventa-dia.vercel.app"
 ]
