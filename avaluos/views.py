@@ -147,14 +147,33 @@ def es_tecnico(request):
     return "tecnico" in rol or "técnico" in rol
 
 
-def fmt_fecha(valor):
+def formatear_fecha_segura(valor):
     if not valor:
         return "—"
 
     try:
-        return timezone.localtime(valor).strftime("%d/%m/%Y %H:%M")
+        if timezone.is_aware(valor):
+            valor = timezone.localtime(valor)
+
+        return valor.strftime("%d/%m/%Y %H:%M")
     except Exception:
         return str(valor)
+
+
+def fecha_actual_formateada():
+    ahora = timezone.now()
+
+    try:
+        if timezone.is_aware(ahora):
+            ahora = timezone.localtime(ahora)
+
+        return ahora.strftime("%d/%m/%Y %H:%M")
+    except Exception:
+        return str(ahora)
+
+
+def fmt_fecha(valor):
+    return formatear_fecha_segura(valor)
 
 
 def texto(valor, default="—"):
@@ -233,7 +252,7 @@ def generar_ticket_pdf(avaluo):
 
     story.append(tabla([
         ["Dato", "Valor", "Dato", "Valor"],
-        ["Asesor", texto(avaluo.asesor_ventas), "Generado", timezone.localtime().strftime("%d/%m/%Y %H:%M")],
+        ["Asesor", texto(avaluo.asesor_ventas), "Generado", fecha_actual_formateada()],
         ["Responsable solicitud", "", "Responsable autorización", ""],
     ], [3.2 * cm, 6 * cm, 4 * cm, 6 * cm]))
 
