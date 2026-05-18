@@ -33,6 +33,8 @@ INSTALLED_APPS = [
     "usuarios",
     "cartera",
     "encuestas",
+    "clientes",
+    "avaluos",
 ]
 
 MIDDLEWARE = [
