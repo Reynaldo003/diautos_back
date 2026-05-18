@@ -96,11 +96,13 @@ DATABASES = {
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
-    "https://crm-diautos.vercel.app",
+
     "https://grupoautomotrizryr.com",
-    "https://grupoautomotrizryr.com/crm_chevrolet",
+    "https://www.grupoautomotrizryr.com",
+
     "https://crmchevrolet.grupoautomotrizryr.com",
-    "https://encuesta-satisfaccion-postventa-dia.vercel.app"
+    "https://crm-diautos.vercel.app",
+    "https://encuesta-satisfaccion-postventa-dia.vercel.app",
 ]
 
 # Déjalo en False para no abrir todo el backend.
@@ -109,16 +111,17 @@ CORS_ALLOW_ALL_ORIGINS = False
 # Solo agrega esto si luego usas cookies/sesión en el navegador.
 CORS_ALLOW_CREDENTIALS = True
 
-# Útil si luego haces formularios o auth desde el front.
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
-    "https://crm-diautos.vercel.app",
-    "https://grupoautomotrizryr.com/crm_chevrolet",
-    "https://grupoautomotrizryr.com",
-    "https://encuesta-satisfaccion-postventa-dia.vercel.app"
-]
 
+    "https://grupoautomotrizryr.com",
+    "https://www.grupoautomotrizryr.com",
+
+    "https://crmchevrolet.grupoautomotrizryr.com",
+    "https://crm-diautos.vercel.app",
+    "https://encuesta-satisfaccion-postventa-dia.vercel.app",
+]
 AUTH_PASSWORD_VALIDATORS = [
     {
         "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
