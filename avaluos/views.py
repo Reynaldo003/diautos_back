@@ -1093,25 +1093,27 @@ def tabla_datos_generales_checklist(avaluo, estilos):
 
     return t
 
-
 def columna_checklist(secciones, checklist_data, estilos):
     flowables = []
 
-    for titulo, numeros in secciones:
+    for index, (titulo, numeros) in enumerate(secciones):
+        if index > 0:
+            flowables.append(Spacer(1, 8))
+
         flowables.append(barra_seccion_checklist(titulo, estilos))
-        flowables.append(Spacer(1, 4))
+
+        flowables.append(Spacer(1, 2))
+
         flowables.append(tabla_items_checklist(numeros, checklist_data, estilos))
-        flowables.append(Spacer(1, 8))
 
         if titulo == "FUNCIONAL EXTERIOR E INTERIOR":
             camaro = imagen_camaro_checklist()
 
             if camaro:
-                flowables.append(camaro)
                 flowables.append(Spacer(1, 4))
+                flowables.append(camaro)
 
     return flowables
-
 
 def bloque_dos_columnas_checklist(left_sections, right_sections, checklist_data, estilos):
     left_flow = columna_checklist(left_sections, checklist_data, estilos)
