@@ -696,7 +696,7 @@ def generar_checklist_pdf(avaluo):
 
     story.append(Paragraph("Datos generales", styles["Heading2"]))
 
-    story.append(tabla_datos_ticket([
+    story.append(tabla([
         ["Campo", "Valor", "Campo", "Valor"],
         [
             "Cliente",
