@@ -494,9 +494,6 @@ def generar_ticket_pdf(avaluo):
 
     if logo_path:
         logo = Image(logo_path)
-
-        # Imagen original: 501 x 131 px
-        # Proporción: ancho / alto = 3.824
         alto_logo = 1.15 * cm
         proporcion_logo = 501 / 131
 
@@ -694,12 +691,12 @@ def generar_checklist_pdf(avaluo):
     cliente = getattr(avaluo, "cliente", None)
 
     story.append(Paragraph("100 Puntos Checklist", styles["Title"]))
-    story.append(Paragraph("Valuación y Certificación de Unidad", styles["Normal"]))
+    story.append(Paragraph("de Valuación y Certificación de Unidad", styles["Normal"]))
     story.append(Spacer(1, 10))
 
     story.append(Paragraph("Datos generales", styles["Heading2"]))
 
-    story.append(tabla([
+    story.append(tabla_datos_ticket([
         ["Campo", "Valor", "Campo", "Valor"],
         [
             "Cliente",
