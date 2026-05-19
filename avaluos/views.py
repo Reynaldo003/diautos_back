@@ -1099,9 +1099,9 @@ def columna_checklist(secciones, checklist_data, estilos):
 
     for titulo, numeros in secciones:
         flowables.append(barra_seccion_checklist(titulo, estilos))
-        flowables.append(Spacer(1, 2))
-        flowables.append(tabla_items_checklist(numeros, checklist_data, estilos))
         flowables.append(Spacer(1, 4))
+        flowables.append(tabla_items_checklist(numeros, checklist_data, estilos))
+        flowables.append(Spacer(1, 8))
 
         if titulo == "FUNCIONAL EXTERIOR E INTERIOR":
             camaro = imagen_camaro_checklist()
