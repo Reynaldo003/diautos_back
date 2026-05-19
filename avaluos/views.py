@@ -494,13 +494,20 @@ def generar_ticket_pdf(avaluo):
 
     if logo_path:
         logo = Image(logo_path)
-        logo.drawWidth = 5.4 * cm
-        logo.drawHeight = logo.drawWidth * (logo.imageHeight / logo.imageWidth)
+
+        # Imagen original: 501 x 131 px
+        # Proporción: ancho / alto = 3.824
+        alto_logo = 1.15 * cm
+        proporcion_logo = 501 / 131
+
+        logo.drawHeight = alto_logo
+        logo.drawWidth = alto_logo * proporcion_logo
+
         logo.hAlign = "RIGHT"
 
         encabezado_derecho = [
             logo,
-            Spacer(1, 3),
+            Spacer(1, 1),
             Paragraph(
                 f"<b>FECHA:</b> {escape(fecha_actual_formateada())}",
                 estilos["fecha"],
