@@ -25,6 +25,7 @@ from reportlab.platypus import (
     Table,
     TableStyle,
     Image,
+    PageBreak,
 )
 
 from usuarios.authentication import SignedUserAuthentication
@@ -683,121 +684,632 @@ def tabla(data, col_widths=None):
 
     return t
 
+def rutas_logos_checklist():
+    rutas_base = []
 
-def generar_checklist_pdf(avaluo):
-    styles = getSampleStyleSheet()
-    story = []
+    media_root = getattr(settings, "MEDIA_ROOT", "")
+    base_dir = getattr(settings, "BASE_DIR", "")
 
+    if media_root:
+        rutas_base.append(str(media_root))
+
+    if base_dir:
+        rutas_base.append(os.path.join(str(base_dir), "media"))
+
+    nombres = {
+        "buick": "buick.png",
+        "cadillac": "cadillac.png",
+        "chevrolet": "chevrolet.png",
+        "gmc": "gmc.png",
+    }
+
+    resultado = {}
+
+    for clave, nombre_archivo in nombres.items():
+        posibles = []
+
+        for base in rutas_base:
+            posibles.extend([
+                os.path.join(base, nombre_archivo),
+                os.path.join(base, "logos", nombre_archivo),
+            ])
+
+        for ruta in posibles:
+            if os.path.exists(ruta):
+                resultado[clave] = ruta
+                break
+
+    return resultado
+
+
+def crear_logo_ajustado(path, max_width_cm, max_height_cm):
+    if not path or not os.path.exists(path):
+        return None
+
+    img = Image(path)
+
+    ancho_original = float(img.imageWidth)
+    alto_original = float(img.imageHeight)
+
+    if not ancho_original or not alto_original:
+        return None
+
+    max_w = max_width_cm * cm
+    max_h = max_height_cm * cm
+
+    factor = min(max_w / ancho_original, max_h / alto_original)
+
+    img.drawWidth = ancho_original * factor
+    img.drawHeight = alto_original * factor
+    img.hAlign = "LEFT"
+
+    return img
+
+
+def estilos_checklist_100():
+    return {
+        "titulo_principal": ParagraphStyle(
+            name="ChecklistTituloPrincipal",
+            fontName="Helvetica-Bold",
+            fontSize=18,
+            leading=20,
+            textColor=COLOR_NEGRO,
+            alignment=TA_RIGHT,
+        ),
+        "subtitulo_principal": ParagraphStyle(
+            name="ChecklistSubtituloPrincipal",
+            fontName="Helvetica",
+            fontSize=9,
+            leading=11,
+            textColor=COLOR_GRIS,
+            alignment=TA_RIGHT,
+        ),
+        "mini": ParagraphStyle(
+            name="ChecklistMini",
+            fontName="Helvetica",
+            fontSize=7,
+            leading=8,
+            textColor=COLOR_GRIS,
+        ),
+        "mini_bold": ParagraphStyle(
+            name="ChecklistMiniBold",
+            fontName="Helvetica-Bold",
+            fontSize=7,
+            leading=8,
+            textColor=COLOR_NEGRO,
+        ),
+        "seccion": ParagraphStyle(
+            name="ChecklistSeccion",
+            fontName="Helvetica-Bold",
+            fontSize=8,
+            leading=10,
+            textColor=COLOR_ORO,
+        ),
+        "label": ParagraphStyle(
+            name="ChecklistLabel",
+            fontName="Helvetica-Bold",
+            fontSize=7,
+            leading=8,
+            textColor=COLOR_NEGRO,
+        ),
+        "value": ParagraphStyle(
+            name="ChecklistValue",
+            fontName="Helvetica",
+            fontSize=7,
+            leading=8,
+            textColor=COLOR_NEGRO,
+        ),
+        "item": ParagraphStyle(
+            name="ChecklistItem",
+            fontName="Helvetica",
+            fontSize=6.8,
+            leading=7.8,
+            textColor=COLOR_NEGRO,
+        ),
+        "item_bold": ParagraphStyle(
+            name="ChecklistItemBold",
+            fontName="Helvetica-Bold",
+            fontSize=6.8,
+            leading=7.8,
+            textColor=COLOR_NEGRO,
+        ),
+        "estado": ParagraphStyle(
+            name="ChecklistEstado",
+            fontName="Helvetica-Bold",
+            fontSize=6.8,
+            leading=7.8,
+            alignment=TA_CENTER,
+            textColor=COLOR_NEGRO,
+        ),
+        "comentario": ParagraphStyle(
+            name="ChecklistComentario",
+            fontName="Helvetica",
+            fontSize=7.5,
+            leading=9,
+            textColor=COLOR_NEGRO,
+        ),
+        "firma": ParagraphStyle(
+            name="ChecklistFirma",
+            fontName="Helvetica-Bold",
+            fontSize=7.2,
+            leading=9,
+            textColor=COLOR_NEGRO,
+            alignment=TA_CENTER,
+        ),
+    }
+
+
+def dibujar_fondo_checklist(canvas, doc):
+    ancho, alto = doc.pagesize
+    pagina = canvas.getPageNumber()
+
+    canvas.saveState()
+
+    canvas.setFillColor(COLOR_BLANCO)
+    canvas.rect(0, 0, ancho, alto, stroke=0, fill=1)
+
+    # marco exterior oro
+    canvas.setStrokeColor(COLOR_ORO)
+    canvas.setLineWidth(1.1)
+    canvas.roundRect(
+        0.32 * cm,
+        0.32 * cm,
+        ancho - 0.64 * cm,
+        alto - 0.64 * cm,
+        8,
+        stroke=1,
+        fill=0,
+    )
+
+    # marco interior gris
+    canvas.setStrokeColor(COLOR_BORDE)
+    canvas.setLineWidth(0.4)
+    canvas.roundRect(
+        0.42 * cm,
+        0.42 * cm,
+        ancho - 0.84 * cm,
+        alto - 0.84 * cm,
+        6,
+        stroke=1,
+        fill=0,
+    )
+
+    # pie
+    canvas.setFont("Helvetica", 7)
+    canvas.setFillColor(COLOR_GRIS)
+    canvas.drawRightString(ancho - 0.65 * cm, 0.55 * cm, f"Página {pagina} de 2")
+
+    canvas.restoreState()
+
+
+def barra_seccion_checklist(titulo, estilos, ancho_cm=9.7):
+    t = Table(
+        [[Paragraph(escape(titulo), estilos["seccion"])]],
+        colWidths=[ancho_cm * cm],
+    )
+
+    t.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), COLOR_NEGRO),
+        ("BOX", (0, 0), (-1, -1), 0.3, COLOR_NEGRO),
+        ("LEFTPADDING", (0, 0), (-1, -1), 5),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING", (0, 0), (-1, -1), 3),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+    ]))
+
+    return t
+
+
+def estado_corto(valor):
+    mapa = {
+        "inspeccion_realizada": "INSP.",
+        "requiere_servicio": "REQ.",
+        "servicio_realizado": "REAL.",
+        "na": "N/A",
+    }
+    return mapa.get(str(valor or "").strip().lower(), "—")
+
+
+def estado_color(valor):
+    valor = str(valor or "").strip().lower()
+
+    if valor == "inspeccion_realizada":
+        return colors.HexColor("#D1FAE5")
+    if valor == "requiere_servicio":
+        return colors.HexColor("#FEE2E2")
+    if valor == "servicio_realizado":
+        return colors.HexColor("#DBEAFE")
+    if valor == "na":
+        return colors.HexColor("#E5E7EB")
+
+    return COLOR_GRIS_CLARO
+
+
+def tabla_items_checklist(numeros, checklist_data, estilos, ancho_cm=9.7):
+    rows = []
+
+    for numero in numeros:
+        descripcion = CHECKLIST_100[numero - 1]
+        estado = checklist_data.get(str(numero), "")
+
+        texto_item = Paragraph(
+            f"<b>{numero}.</b> {escape(descripcion)}",
+            estilos["item"],
+        )
+
+        texto_estado = Paragraph(
+            estado_corto(estado),
+            estilos["estado"],
+        )
+
+        rows.append([texto_item, texto_estado])
+
+    t = Table(
+        rows,
+        colWidths=[(ancho_cm - 1.55) * cm, 1.55 * cm],
+    )
+
+    style_cmds = [
+        ("BOX", (0, 0), (-1, -1), 0.35, COLOR_BORDE),
+        ("INNERGRID", (0, 0), (-1, -1), 0.25, COLOR_BORDE),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+        ("ALIGN", (1, 0), (1, -1), "CENTER"),
+    ]
+
+    for i, numero in enumerate(numeros):
+        estado = checklist_data.get(str(numero), "")
+        style_cmds.append(("BACKGROUND", (1, i), (1, i), estado_color(estado)))
+
+    t.setStyle(TableStyle(style_cmds))
+    return t
+
+
+def header_checklist_pdf(avaluo, estilos):
+    logos = rutas_logos_checklist()
+
+    logos_flow = []
+
+    for clave in ["buick", "chevrolet", "gmc", "cadillac"]:
+        img = crear_logo_ajustado(logos.get(clave), max_width_cm=2.0, max_height_cm=0.65)
+        if img:
+            logos_flow.append(img)
+
+    if logos_flow:
+        tabla_logos = Table([logos_flow], colWidths=None)
+        tabla_logos.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+            ("TOPPADDING", (0, 0), (-1, -1), 0),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+        ]))
+    else:
+        tabla_logos = Paragraph("SEMINUEVOS CERTIFICADOS", estilos["mini_bold"])
+
+    bloque_izq = [
+        tabla_logos,
+        Spacer(1, 2),
+        Paragraph("SEMINUEVOS CERTIFICADOS", estilos["mini_bold"]),
+    ]
+
+    bloque_der = [
+        Paragraph("100 PUNTOS · CHECKLIST", estilos["titulo_principal"]),
+        Paragraph("Valuación y Certificación de Unidades", estilos["subtitulo_principal"]),
+        Spacer(1, 2),
+        Paragraph(
+            f"<b>Folio:</b> {obtener_id_avaluo(avaluo)} &nbsp;&nbsp;&nbsp; "
+            f"<b>Fecha:</b> {escape(fecha_actual_formateada())}",
+            estilos["mini_bold"],
+        ),
+    ]
+
+    header = Table(
+        [[bloque_izq, bloque_der]],
+        colWidths=[9.5 * cm, 10.3 * cm],
+    )
+
+    header.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("ALIGN", (0, 0), (0, 0), "LEFT"),
+        ("ALIGN", (1, 0), (1, 0), "RIGHT"),
+        ("LINEBELOW", (0, 0), (-1, -1), 1.1, COLOR_ORO),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
+
+    return header
+
+
+def tabla_datos_generales_checklist(avaluo, estilos):
     cliente = getattr(avaluo, "cliente", None)
 
-    story.append(Paragraph("100 Puntos Checklist", styles["Title"]))
-    story.append(Paragraph("de Valuación y Certificación de Unidad", styles["Normal"]))
+    data = [
+        [
+            Paragraph("Cliente", estilos["label"]),
+            Paragraph(texto(getattr(cliente, "nombre", "")), estilos["value"]),
+            Paragraph("Teléfono", estilos["label"]),
+            Paragraph(texto(getattr(cliente, "telefono", "")), estilos["value"]),
+        ],
+        [
+            Paragraph("Distribuidor", estilos["label"]),
+            Paragraph(texto(getattr(avaluo, "agencia", "")), estilos["value"]),
+            Paragraph("Asesor", estilos["label"]),
+            Paragraph(texto(getattr(avaluo, "asesor_ventas", "")), estilos["value"]),
+        ],
+        [
+            Paragraph("Fecha avalúo", estilos["label"]),
+            Paragraph(fmt_fecha(getattr(avaluo, "fecha_avaluo", None)), estilos["value"]),
+            Paragraph("Tipo valuación", estilos["label"]),
+            Paragraph(
+                texto(obtener_display(avaluo, "get_tipo_valuacion_display", "tipo_valuacion")),
+                estilos["value"],
+            ),
+        ],
+        [
+            Paragraph("Marca / Modelo", estilos["label"]),
+            Paragraph(
+                texto(f'{getattr(avaluo, "marca_auto", "")} {getattr(avaluo, "modelo", "")}'.strip()),
+                estilos["value"],
+            ),
+            Paragraph("Versión", estilos["label"]),
+            Paragraph(texto(getattr(avaluo, "version", "")), estilos["value"]),
+        ],
+        [
+            Paragraph("Año / KM", estilos["label"]),
+            Paragraph(
+                texto(f'{getattr(avaluo, "anio_modelo", "")} / {getattr(avaluo, "kilometraje", "")}'.strip(" /")),
+                estilos["value"],
+            ),
+            Paragraph("Color", estilos["label"]),
+            Paragraph(texto(getattr(avaluo, "color", "")), estilos["value"]),
+        ],
+        [
+            Paragraph("VIN / Serie", estilos["label"]),
+            Paragraph(texto(getattr(avaluo, "serie", "")), estilos["value"]),
+            Paragraph("Placas", estilos["label"]),
+            Paragraph(texto(getattr(avaluo, "placas", "")), estilos["value"]),
+        ],
+    ]
+
+    t = Table(
+        data,
+        colWidths=[2.15 * cm, 7.05 * cm, 2.15 * cm, 8.10 * cm],
+    )
+
+    t.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 0.45, COLOR_BORDE),
+        ("INNERGRID", (0, 0), (-1, -1), 0.25, COLOR_BORDE),
+        ("BACKGROUND", (0, 0), (0, -1), COLOR_GRIS_CLARO),
+        ("BACKGROUND", (2, 0), (2, -1), COLOR_GRIS_CLARO),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 3),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+    ]))
+
+    return t
+
+
+def columna_checklist(secciones, checklist_data, estilos):
+    flowables = []
+
+    for titulo, numeros in secciones:
+        flowables.append(barra_seccion_checklist(titulo, estilos))
+        flowables.append(Spacer(1, 2))
+        flowables.append(tabla_items_checklist(numeros, checklist_data, estilos))
+        flowables.append(Spacer(1, 4))
+
+    return flowables
+
+
+def bloque_dos_columnas_checklist(left_sections, right_sections, checklist_data, estilos):
+    left_flow = columna_checklist(left_sections, checklist_data, estilos)
+    right_flow = columna_checklist(right_sections, checklist_data, estilos)
+
+    t = Table(
+        [[left_flow, "", right_flow]],
+        colWidths=[9.7 * cm, 0.3 * cm, 9.7 * cm],
+    )
+
+    t.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 0),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+    ]))
+
+    return t
+
+
+def resumen_valores_checklist(avaluo, estilos):
+    data = [
+        [Paragraph("Referencia / guía", estilos["label"]), Paragraph(texto(getattr(avaluo, "precio_guia", "")), estilos["value"])],
+        [Paragraph("Compra Libro Azul", estilos["label"]), Paragraph(texto(getattr(avaluo, "precio_compra_libro_azul", "")), estilos["value"])],
+        [Paragraph("Venta Libro Azul", estilos["label"]), Paragraph(texto(getattr(avaluo, "precio_venta_libro_azul", "")), estilos["value"])],
+        [Paragraph("Total mecánica", estilos["label"]), Paragraph(moneda(getattr(avaluo, "costo_mecanica_total", 0)), estilos["value"])],
+        [Paragraph("Total reparación", estilos["label"]), Paragraph(moneda(getattr(avaluo, "costo_reparacion", 0)), estilos["value"])],
+        [Paragraph("Oferta inicial", estilos["label"]), Paragraph(texto(getattr(avaluo, "oferta_inicial", "")), estilos["value"])],
+        [Paragraph("Oferta final", estilos["label"]), Paragraph(texto(getattr(avaluo, "oferta_final", "")), estilos["value"])],
+    ]
+
+    t = Table(data, colWidths=[4.25 * cm, 4.90 * cm])
+
+    t.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 0.45, COLOR_BORDE),
+        ("INNERGRID", (0, 0), (-1, -1), 0.25, COLOR_BORDE),
+        ("BACKGROUND", (0, 0), (0, -1), COLOR_GRIS_CLARO),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 3),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+    ]))
+
+    return t
+
+
+def caja_comentarios_checklist(avaluo, estilos):
+    comentarios = recortar_texto(
+        (
+            getattr(avaluo, "comentarios", "")
+            or getattr(avaluo, "observaciones", "")
+            or getattr(avaluo, "descripcion", "")
+            or "Sin comentarios."
+        ),
+        limite=500,
+        default="Sin comentarios.",
+    )
+
+    t = Table(
+        [[Paragraph(texto_pdf(comentarios), estilos["comentario"])]],
+        colWidths=[9.15 * cm],
+        rowHeights=[3.25 * cm],
+    )
+
+    t.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 0.45, COLOR_BORDE),
+        ("LEFTPADDING", (0, 0), (-1, -1), 5),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+    ]))
+
+    return t
+
+
+def bloque_resumen_final_checklist(avaluo, estilos):
+    izquierda = [
+        barra_seccion_checklist("COTIZACIÓN / VALORES", estilos, ancho_cm=9.15),
+        Spacer(1, 2),
+        resumen_valores_checklist(avaluo, estilos),
+    ]
+
+    derecha = [
+        barra_seccion_checklist("COMENTARIOS", estilos, ancho_cm=9.15),
+        Spacer(1, 2),
+        caja_comentarios_checklist(avaluo, estilos),
+    ]
+
+    t = Table(
+        [[izquierda, "", derecha]],
+        colWidths=[9.15 * cm, 0.4 * cm, 9.15 * cm],
+    )
+
+    t.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 0),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+    ]))
+
+    return t
+
+
+def firmas_checklist_mejoradas(estilos):
+    firmas = Table(
+        [
+            ["", "", ""],
+            [
+                Paragraph("TÉCNICO CERTIFICADO POR GM<br/><font size='6'>Nombre y firma</font>", estilos["firma"]),
+                Paragraph("GERENTE DE SEMINUEVOS<br/><font size='6'>Nombre y firma</font>", estilos["firma"]),
+                Paragraph("VALUADOR - COMPRADOR<br/><font size='6'>Nombre y firma</font>", estilos["firma"]),
+            ],
+        ],
+        colWidths=[6.1 * cm, 6.1 * cm, 6.1 * cm],
+        rowHeights=[0.75 * cm, 0.75 * cm],
+    )
+
+    firmas.setStyle(TableStyle([
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LINEABOVE", (0, 1), (0, 1), 0.8, COLOR_NEGRO),
+        ("LINEABOVE", (1, 1), (1, 1), 0.8, COLOR_NEGRO),
+        ("LINEABOVE", (2, 1), (2, 1), 0.8, COLOR_NEGRO),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+        ("TOPPADDING", (0, 1), (-1, 1), 4),
+    ]))
+
+    return firmas
+def generar_checklist_pdf(avaluo):
+    estilos = estilos_checklist_100()
+    story = []
+
+    checklist_data = getattr(avaluo, "checklist_100", None) or {}
+    if not isinstance(checklist_data, dict):
+        checklist_data = {}
+
+    # -------------------------
+    # PÁGINA 1
+    # -------------------------
+    page1_left = [
+        ("REVISIÓN EXTERIOR", list(range(1, 20))),
+        ("FUNCIONAL EXTERIOR E INTERIOR", list(range(20, 24))),
+    ]
+
+    page1_right = [
+        ("FUNCIONALIDAD / INTERIOR", list(range(24, 39))),
+        ("PRUEBA DE MANEJO", list(range(39, 58))),
+    ]
+
+    story.append(header_checklist_pdf(avaluo, estilos))
+    story.append(Spacer(1, 4))
+    story.append(tabla_datos_generales_checklist(avaluo, estilos))
+    story.append(Spacer(1, 5))
+    story.append(
+        bloque_dos_columnas_checklist(
+            page1_left,
+            page1_right,
+            checklist_data,
+            estilos,
+        )
+    )
+
+    # -------------------------
+    # PÁGINA 2
+    # -------------------------
+    story.append(PageBreak())
+
+    page2_left = [
+        ("BAJO EL COFRE", list(range(58, 71))),
+        ("OTRAS PRUEBAS ESPECÍFICAS", list(range(71, 74))),
+        ("BAJO EL VEHÍCULO", list(range(74, 79))),
+    ]
+
+    page2_right = [
+        ("BAJO EL VEHÍCULO (CONT.)", list(range(79, 90))),
+        ("HISTORIAL DEL VEHÍCULO", list(range(90, 94))),
+        ("CERTIFICACIÓN DEL VEHÍCULO", list(range(94, 101))),
+    ]
+
+    story.append(header_checklist_pdf(avaluo, estilos))
+    story.append(Spacer(1, 4))
+    story.append(
+        bloque_dos_columnas_checklist(
+            page2_left,
+            page2_right,
+            checklist_data,
+            estilos,
+        )
+    )
+    story.append(Spacer(1, 4))
+    story.append(bloque_resumen_final_checklist(avaluo, estilos))
     story.append(Spacer(1, 10))
-
-    story.append(Paragraph("Datos generales", styles["Heading2"]))
-
-    story.append(tabla([
-        ["Campo", "Valor", "Campo", "Valor"],
-        [
-            "Cliente",
-            texto(getattr(cliente, "nombre", "")),
-            "Teléfono",
-            texto(getattr(cliente, "telefono", "")),
-        ],
-        [
-            "Correo",
-            texto(getattr(cliente, "correo", "")),
-            "Agencia",
-            texto(getattr(avaluo, "agencia", "")),
-        ],
-        [
-            "Asesor",
-            texto(getattr(avaluo, "asesor_ventas", "")),
-            "Fecha avalúo",
-            fmt_fecha(getattr(avaluo, "fecha_avaluo", None)),
-        ],
-        [
-            "Tipo valuación",
-            texto(obtener_display(avaluo, "get_tipo_valuacion_display", "tipo_valuacion")),
-            "Tipo toma",
-            texto(obtener_display(avaluo, "get_tipo_toma_display", "tipo_toma")),
-        ],
-    ], [3.2 * cm, 6 * cm, 4 * cm, 6 * cm]))
-
-    story.append(Spacer(1, 10))
-
-    story.append(Paragraph("Datos del coche", styles["Heading2"]))
-
-    story.append(tabla([
-        ["Campo", "Valor", "Campo", "Valor"],
-        [
-            "Marca",
-            texto(getattr(avaluo, "marca_auto", "")),
-            "Modelo",
-            texto(getattr(avaluo, "modelo", "")),
-        ],
-        [
-            "Año",
-            texto(getattr(avaluo, "anio_modelo", "")),
-            "Versión",
-            texto(getattr(avaluo, "version", "")),
-        ],
-        [
-            "No. Serie",
-            texto(getattr(avaluo, "serie", "")),
-            "Placas",
-            texto(getattr(avaluo, "placas", "")),
-        ],
-        [
-            "Color",
-            texto(getattr(avaluo, "color", "")),
-            "KM",
-            texto(getattr(avaluo, "kilometraje", "")),
-        ],
-    ], [3.2 * cm, 6 * cm, 4 * cm, 6 * cm]))
-
-    story.append(Spacer(1, 10))
-
-    story.append(Paragraph("Checklist 100 puntos", styles["Heading2"]))
-
-    checklist = getattr(avaluo, "checklist_100", None) or {}
-
-    if not isinstance(checklist, dict):
-        checklist = {}
-
-    data = [["#", "Punto", "Estado"]]
-
-    for index, descripcion in enumerate(CHECKLIST_100, start=1):
-        data.append([
-            str(index),
-            descripcion,
-            estado_checklist(checklist.get(str(index))),
-        ])
-
-    story.append(tabla(data, [1.1 * cm, 12.5 * cm, 4.5 * cm]))
-
-    story.append(Spacer(1, 10))
-
-    story.append(Paragraph("Costos", styles["Heading2"]))
-
-    story.append(tabla([
-        ["Concepto", "Total"],
-        ["Mecánica", moneda(getattr(avaluo, "costo_mecanica_total", 0))],
-        ["Total reparación", moneda(getattr(avaluo, "costo_reparacion", 0))],
-        ["Oferta inicial", texto(getattr(avaluo, "oferta_inicial", ""))],
-        ["Oferta final", texto(getattr(avaluo, "oferta_final", ""))],
-    ], [8 * cm, 8 * cm]))
-
-    story.append(Spacer(1, 25))
-
-    story.append(tabla([
-        ["Responsable de solicitud", "Responsable de autorización", "Valuador - Comprador"],
-        ["\n\nNombre y firma", "\n\nNombre y firma", "\n\nNombre y firma"],
-    ], [6 * cm, 6 * cm, 6 * cm]))
+    story.append(firmas_checklist_mejoradas(estilos))
 
     return pdf_response(
         story,
         f"checklist_100_avaluo_{obtener_id_avaluo(avaluo)}.pdf",
+        pagesize=letter,
+        margin=0.50 * cm,
+        on_page=dibujar_fondo_checklist,
     )
 
 
