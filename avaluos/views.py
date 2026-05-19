@@ -973,7 +973,7 @@ def header_checklist_pdf(avaluo, estilos):
 
     logos_flow = []
 
-    for clave in ["buick", "chevrolet", "gmc", "cadillac"]:
+    for clave in ["chevrolet", "buick", "gmc", "cadillac"]:
         img = crear_logo_ajustado(logos.get(clave), max_width_cm=2.0, max_height_cm=0.65)
         if img:
             logos_flow.append(img)
@@ -1098,7 +1098,7 @@ def columna_checklist(secciones, checklist_data, estilos):
 
     for index, (titulo, numeros) in enumerate(secciones):
         if index > 0:
-            flowables.append(Spacer(1, 8))
+            flowables.append(Spacer(1, 15))
 
         flowables.append(barra_seccion_checklist(titulo, estilos))
 
