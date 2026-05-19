@@ -1,6 +1,9 @@
+import os
 from io import BytesIO
 from decimal import Decimal
+from xml.sax.saxutils import escape
 
+from django.conf import settings
 from django.http import HttpResponse
 from django.utils import timezone
 
@@ -11,10 +14,18 @@ from rest_framework.parsers import JSONParser, FormParser, MultiPartParser
 from rest_framework.response import Response
 
 from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.lib.pagesizes import letter
-from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.platypus import (
+    SimpleDocTemplate,
+    Paragraph,
+    Spacer,
+    Table,
+    TableStyle,
+    Image,
+)
 
 from usuarios.authentication import SignedUserAuthentication
 from .models import AvaluoUsado
@@ -125,6 +136,17 @@ CHECKLIST_100 = [
 ]
 
 
+COLOR_ORO = colors.HexColor("#C9A75D")
+COLOR_NEGRO = colors.HexColor("#111827")
+COLOR_GRIS = colors.HexColor("#475569")
+COLOR_GRIS_CLARO = colors.HexColor("#F8FAFC")
+COLOR_BORDE = colors.HexColor("#CBD5E1")
+COLOR_BLANCO = colors.white
+
+# Media carta horizontal: 8.5 x 5.5 pulgadas.
+MEDIA_CARTA_HORIZONTAL = (letter[0], letter[1] / 2)
+
+
 def normalizar_rol(request):
     rol = getattr(request.user, "rol", "") or ""
     return str(rol).strip().lower()
@@ -133,12 +155,13 @@ def normalizar_rol(request):
 def es_admin_o_valuador(request):
     rol = normalizar_rol(request)
     permisos = getattr(request.user, "permisos", []) or []
+    permisos_normalizados = [str(p).lower() for p in permisos]
 
     return (
         "administrador" in rol
         or "valuador" in rol
-        or "all" in [str(p).lower() for p in permisos]
-        or "usuarios_admin" in [str(p).lower() for p in permisos]
+        or "all" in permisos_normalizados
+        or "usuarios_admin" in permisos_normalizados
     )
 
 
@@ -181,6 +204,24 @@ def texto(valor, default="—"):
     return valor or default
 
 
+def texto_pdf(valor, default="—"):
+    valor = texto(valor, default)
+    return escape(valor).replace("\n", "<br/>")
+
+
+def parrafo_pdf(valor, estilo, default="—"):
+    return Paragraph(texto_pdf(valor, default), estilo)
+
+
+def recortar_texto(valor, limite=260, default="—"):
+    valor = texto(valor, default)
+
+    if len(valor) <= limite:
+        return valor
+
+    return valor[:limite].rstrip() + "..."
+
+
 def moneda(valor):
     try:
         numero = Decimal(str(valor or "0"))
@@ -188,6 +229,22 @@ def moneda(valor):
         numero = Decimal("0")
 
     return f"${numero:,.2f}"
+
+
+def obtener_id_avaluo(avaluo):
+    return getattr(avaluo, "id", "sin_id")
+
+
+def obtener_display(objeto, nombre_metodo, nombre_campo):
+    metodo = getattr(objeto, nombre_metodo, None)
+
+    if callable(metodo):
+        try:
+            return metodo()
+        except Exception:
+            pass
+
+    return getattr(objeto, nombre_campo, "")
 
 
 def estado_checklist(valor):
@@ -203,19 +260,22 @@ def estado_checklist(valor):
     return mapa.get(str(valor or "").strip().lower(), "")
 
 
-def pdf_response(story, filename):
+def pdf_response(story, filename, pagesize=letter, margin=1.2 * cm, on_page=None):
     buffer = BytesIO()
 
     doc = SimpleDocTemplate(
         buffer,
-        pagesize=letter,
-        rightMargin=1.2 * cm,
-        leftMargin=1.2 * cm,
-        topMargin=1.2 * cm,
-        bottomMargin=1.2 * cm,
+        pagesize=pagesize,
+        rightMargin=margin,
+        leftMargin=margin,
+        topMargin=margin,
+        bottomMargin=margin,
     )
 
-    doc.build(story)
+    if on_page:
+        doc.build(story, onFirstPage=on_page, onLaterPages=on_page)
+    else:
+        doc.build(story)
 
     buffer.seek(0)
 
@@ -224,8 +284,385 @@ def pdf_response(story, filename):
     return response
 
 
+def ruta_logo_seminuevos():
+    rutas_base = []
+
+    media_root = getattr(settings, "MEDIA_ROOT", "")
+    base_dir = getattr(settings, "BASE_DIR", "")
+
+    if media_root:
+        rutas_base.append(str(media_root))
+
+    if base_dir:
+        rutas_base.append(os.path.join(str(base_dir), "media"))
+
+    posibles_rutas = []
+
+    for ruta_base in rutas_base:
+        posibles_rutas.extend([
+            os.path.join(ruta_base, "seminuevos.png"),
+            os.path.join(ruta_base, "logos", "seminuevos.png"),
+        ])
+
+    for ruta in posibles_rutas:
+        if os.path.exists(ruta):
+            return ruta
+
+    return None
+
+
+def estilos_ticket():
+    return {
+        "titulo": ParagraphStyle(
+            name="TicketTitulo",
+            fontName="Helvetica-Bold",
+            fontSize=14,
+            leading=16,
+            textColor=COLOR_NEGRO,
+            alignment=TA_CENTER,
+            spaceAfter=2,
+        ),
+        "subtitulo": ParagraphStyle(
+            name="TicketSubtitulo",
+            fontName="Helvetica-Oblique",
+            fontSize=10,
+            leading=12,
+            textColor=COLOR_GRIS,
+            alignment=TA_CENTER,
+        ),
+        "fecha": ParagraphStyle(
+            name="TicketFecha",
+            fontName="Helvetica-Bold",
+            fontSize=8,
+            leading=10,
+            textColor=COLOR_NEGRO,
+            alignment=TA_RIGHT,
+        ),
+        "logo_texto": ParagraphStyle(
+            name="TicketLogoTexto",
+            fontName="Helvetica-Bold",
+            fontSize=12,
+            leading=14,
+            textColor=COLOR_NEGRO,
+            alignment=TA_RIGHT,
+        ),
+        "seccion": ParagraphStyle(
+            name="TicketSeccion",
+            fontName="Helvetica-Bold",
+            fontSize=8,
+            leading=10,
+            textColor=COLOR_ORO,
+            alignment=TA_LEFT,
+        ),
+        "etiqueta": ParagraphStyle(
+            name="TicketEtiqueta",
+            fontName="Helvetica-Bold",
+            fontSize=7.5,
+            leading=9,
+            textColor=COLOR_NEGRO,
+        ),
+        "valor": ParagraphStyle(
+            name="TicketValor",
+            fontName="Helvetica",
+            fontSize=7.5,
+            leading=9,
+            textColor=COLOR_NEGRO,
+        ),
+        "comentario": ParagraphStyle(
+            name="TicketComentario",
+            fontName="Helvetica",
+            fontSize=8,
+            leading=10,
+            textColor=COLOR_NEGRO,
+        ),
+        "firma": ParagraphStyle(
+            name="TicketFirma",
+            fontName="Helvetica-Bold",
+            fontSize=7.5,
+            leading=10,
+            textColor=COLOR_NEGRO,
+            alignment=TA_CENTER,
+        ),
+    }
+
+
+def dibujar_fondo_ticket(canvas, doc):
+    ancho, alto = doc.pagesize
+
+    canvas.saveState()
+
+    canvas.setFillColor(COLOR_BLANCO)
+    canvas.rect(0, 0, ancho, alto, stroke=0, fill=1)
+
+    canvas.setStrokeColor(COLOR_ORO)
+    canvas.setLineWidth(1.4)
+    canvas.roundRect(
+        0.35 * cm,
+        0.35 * cm,
+        ancho - 0.70 * cm,
+        alto - 0.70 * cm,
+        8,
+        stroke=1,
+        fill=0,
+    )
+
+    canvas.setStrokeColor(COLOR_BORDE)
+    canvas.setLineWidth(0.4)
+    canvas.roundRect(
+        0.45 * cm,
+        0.45 * cm,
+        ancho - 0.90 * cm,
+        alto - 0.90 * cm,
+        6,
+        stroke=1,
+        fill=0,
+    )
+
+    canvas.restoreState()
+
+
+def seccion_ticket(titulo, estilos):
+    t = Table(
+        [[Paragraph(escape(titulo), estilos["seccion"])]],
+        colWidths=[20 * cm],
+    )
+
+    t.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), COLOR_NEGRO),
+        ("BOX", (0, 0), (-1, -1), 0.3, COLOR_NEGRO),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
+
+    return t
+
+
+def tabla_datos_ticket(filas, estilos):
+    data = []
+
+    for etiqueta_1, valor_1, etiqueta_2, valor_2 in filas:
+        data.append([
+            parrafo_pdf(etiqueta_1, estilos["etiqueta"]),
+            parrafo_pdf(valor_1, estilos["valor"]),
+            parrafo_pdf(etiqueta_2, estilos["etiqueta"]),
+            parrafo_pdf(valor_2, estilos["valor"]),
+        ])
+
+    t = Table(
+        data,
+        colWidths=[2.55 * cm, 6.95 * cm, 2.85 * cm, 7.65 * cm],
+    )
+
+    t.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 0.5, COLOR_BORDE),
+        ("INNERGRID", (0, 0), (-1, -1), 0.3, COLOR_BORDE),
+
+        ("BACKGROUND", (0, 0), (0, -1), COLOR_GRIS_CLARO),
+        ("BACKGROUND", (2, 0), (2, -1), COLOR_GRIS_CLARO),
+
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+
+        ("LEFTPADDING", (0, 0), (-1, -1), 5),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
+
+    return t
+
+
+def generar_ticket_pdf(avaluo):
+    estilos = estilos_ticket()
+    story = []
+
+    logo_path = ruta_logo_seminuevos()
+
+    titulo = Paragraph(
+        "SOLICITUD DE SERVICIO &amp;<br/>REFACCIONES",
+        estilos["titulo"],
+    )
+
+    subtitulo = Paragraph("Cargo Interno", estilos["subtitulo"])
+
+    encabezado_izquierdo = [
+        titulo,
+        Spacer(1, 2),
+        subtitulo,
+    ]
+
+    if logo_path:
+        logo = Image(logo_path)
+        logo.drawWidth = 6.4 * cm
+        logo.drawHeight = logo.drawWidth * (logo.imageHeight / logo.imageWidth)
+        logo.hAlign = "RIGHT"
+
+        encabezado_derecho = [
+            logo,
+            Spacer(1, 3),
+            Paragraph(
+                f"<b>FECHA:</b> {escape(fecha_actual_formateada())}",
+                estilos["fecha"],
+            ),
+        ]
+    else:
+        encabezado_derecho = [
+            Paragraph(
+                "CHEVROLET<br/>SEMINUEVOS CERTIFICADOS",
+                estilos["logo_texto"],
+            ),
+            Spacer(1, 3),
+            Paragraph(
+                f"<b>FECHA:</b> {escape(fecha_actual_formateada())}",
+                estilos["fecha"],
+            ),
+        ]
+
+    header = Table(
+        [[encabezado_izquierdo, encabezado_derecho]],
+        colWidths=[9 * cm, 11 * cm],
+    )
+
+    header.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("ALIGN", (0, 0), (0, 0), "CENTER"),
+        ("ALIGN", (1, 0), (1, 0), "RIGHT"),
+        ("LINEBELOW", (0, 0), (-1, -1), 1.2, COLOR_ORO),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+    ]))
+
+    story.append(header)
+    story.append(Spacer(1, 5))
+
+    story.append(seccion_ticket("DATOS DE LA SOLICITUD", estilos))
+
+    story.append(tabla_datos_ticket([
+        [
+            "Folio",
+            obtener_id_avaluo(avaluo),
+            "Generado",
+            fecha_actual_formateada(),
+        ],
+        [
+            "Asesor",
+            getattr(avaluo, "asesor_ventas", ""),
+            "Agencia",
+            getattr(avaluo, "agencia", ""),
+        ],
+    ], estilos))
+
+    story.append(Spacer(1, 5))
+
+    story.append(seccion_ticket("DATOS DEL VEHÍCULO", estilos))
+
+    story.append(tabla_datos_ticket([
+        [
+            "Marca",
+            getattr(avaluo, "marca_auto", ""),
+            "Color",
+            getattr(avaluo, "color", ""),
+        ],
+        [
+            "Modelo",
+            getattr(avaluo, "modelo", ""),
+            "Año",
+            getattr(avaluo, "anio_modelo", ""),
+        ],
+        [
+            "Versión",
+            getattr(avaluo, "version", ""),
+            "No. Serie",
+            getattr(avaluo, "serie", ""),
+        ],
+        [
+            "Vendedor",
+            getattr(avaluo, "vendedor", "") or getattr(avaluo, "asesor_ventas", ""),
+            "Placas",
+            getattr(avaluo, "placas", ""),
+        ],
+        [
+            "KM",
+            getattr(avaluo, "kilometraje", ""),
+            "Fecha avalúo",
+            fmt_fecha(getattr(avaluo, "fecha_avaluo", None)),
+        ],
+    ], estilos))
+
+    story.append(Spacer(1, 5))
+
+    story.append(seccion_ticket("COMENTARIOS / TRABAJO SOLICITADO", estilos))
+
+    comentarios = (
+        getattr(avaluo, "comentarios", "")
+        or getattr(avaluo, "observaciones", "")
+        or "Valuación"
+    )
+
+    comentarios = recortar_texto(comentarios, limite=260, default="Valuación")
+
+    tabla_comentarios = Table(
+        [[parrafo_pdf(comentarios, estilos["comentario"])]],
+        colWidths=[20 * cm],
+        rowHeights=[1.45 * cm],
+    )
+
+    tabla_comentarios.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 0.5, COLOR_BORDE),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+    ]))
+
+    story.append(tabla_comentarios)
+    story.append(Spacer(1, 8))
+
+    firmas = Table(
+        [
+            ["", ""],
+            [
+                Paragraph(
+                    "RESPONSABLE DE SOLICITUD<br/><font size='6'>Nombre y firma</font>",
+                    estilos["firma"],
+                ),
+                Paragraph(
+                    "RESPONSABLE DE AUTORIZACIÓN<br/><font size='6'>Nombre y firma</font>",
+                    estilos["firma"],
+                ),
+            ],
+        ],
+        colWidths=[9.6 * cm, 9.6 * cm],
+        rowHeights=[0.8 * cm, 0.65 * cm],
+    )
+
+    firmas.setStyle(TableStyle([
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+
+        ("LINEABOVE", (0, 1), (0, 1), 0.8, COLOR_NEGRO),
+        ("LINEABOVE", (1, 1), (1, 1), 0.8, COLOR_NEGRO),
+
+        ("LEFTPADDING", (0, 0), (-1, -1), 12),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 12),
+        ("TOPPADDING", (0, 1), (-1, 1), 4),
+    ]))
+
+    story.append(firmas)
+
+    return pdf_response(
+        story,
+        f"ticket_avaluo_{obtener_id_avaluo(avaluo)}.pdf",
+        pagesize=MEDIA_CARTA_HORIZONTAL,
+        margin=0.7 * cm,
+        on_page=dibujar_fondo_ticket,
+    )
+
+
 def tabla(data, col_widths=None):
     t = Table(data, colWidths=col_widths)
+
     t.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#111827")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
@@ -239,53 +676,15 @@ def tabla(data, col_widths=None):
         ("TOPPADDING", (0, 0), (-1, -1), 4),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
     ]))
+
     return t
-
-
-def generar_ticket_pdf(avaluo):
-    styles = getSampleStyleSheet()
-    story = []
-
-    story.append(Paragraph("Solicitud de Servicio y Refacciones - Cargo Interno", styles["Title"]))
-    story.append(Paragraph("Seminuevos Certificados Chevrolet", styles["Normal"]))
-    story.append(Spacer(1, 10))
-
-    story.append(tabla([
-        ["Dato", "Valor", "Dato", "Valor"],
-        ["Asesor", texto(avaluo.asesor_ventas), "Generado", fecha_actual_formateada()],
-        ["Responsable solicitud", "", "Responsable autorización", ""],
-    ], [3.2 * cm, 6 * cm, 4 * cm, 6 * cm]))
-
-    story.append(Spacer(1, 10))
-
-    story.append(Paragraph("Datos del vehículo", styles["Heading2"]))
-    story.append(tabla([
-        ["Campo", "Valor", "Campo", "Valor"],
-        ["Marca", texto(avaluo.marca_auto), "Color", texto(avaluo.color)],
-        ["Modelo", texto(avaluo.modelo), "Año", texto(avaluo.anio_modelo)],
-        ["No. Serie", texto(avaluo.serie), "Versión", texto(avaluo.version)],
-        ["Vendedor", texto(avaluo.vendedor or avaluo.asesor_ventas), "Placas", texto(avaluo.placas)],
-        ["KM", texto(avaluo.kilometraje), "Fecha avalúo", fmt_fecha(avaluo.fecha_avaluo)],
-    ], [3.2 * cm, 6 * cm, 4 * cm, 6 * cm]))
-
-    story.append(Spacer(1, 10))
-
-    story.append(Paragraph("Comentarios", styles["Heading2"]))
-    story.append(Paragraph(texto(avaluo.comentarios, "Valuación"), styles["Normal"]))
-
-    story.append(Spacer(1, 35))
-
-    story.append(tabla([
-        ["Responsable de solicitud", "Responsable de autorización"],
-        ["\n\nNombre y firma", "\n\nNombre y firma"],
-    ], [9 * cm, 9 * cm]))
-
-    return pdf_response(story, f"ticket_avaluo_{avaluo.id}.pdf")
 
 
 def generar_checklist_pdf(avaluo):
     styles = getSampleStyleSheet()
     story = []
+
+    cliente = getattr(avaluo, "cliente", None)
 
     story.append(Paragraph("100 Puntos Checklist", styles["Title"]))
     story.append(Paragraph("Valuación y Certificación de Unidad", styles["Normal"]))
@@ -293,32 +692,74 @@ def generar_checklist_pdf(avaluo):
 
     story.append(Paragraph("Datos generales", styles["Heading2"]))
 
-    cliente = avaluo.cliente
-
     story.append(tabla([
         ["Campo", "Valor", "Campo", "Valor"],
-        ["Cliente", texto(cliente.nombre), "Teléfono", texto(cliente.telefono)],
-        ["Correo", texto(cliente.correo), "Agencia", texto(avaluo.agencia)],
-        ["Asesor", texto(avaluo.asesor_ventas), "Fecha avalúo", fmt_fecha(avaluo.fecha_avaluo)],
-        ["Tipo valuación", texto(avaluo.get_tipo_valuacion_display()), "Tipo toma", texto(avaluo.get_tipo_toma_display())],
+        [
+            "Cliente",
+            texto(getattr(cliente, "nombre", "")),
+            "Teléfono",
+            texto(getattr(cliente, "telefono", "")),
+        ],
+        [
+            "Correo",
+            texto(getattr(cliente, "correo", "")),
+            "Agencia",
+            texto(getattr(avaluo, "agencia", "")),
+        ],
+        [
+            "Asesor",
+            texto(getattr(avaluo, "asesor_ventas", "")),
+            "Fecha avalúo",
+            fmt_fecha(getattr(avaluo, "fecha_avaluo", None)),
+        ],
+        [
+            "Tipo valuación",
+            texto(obtener_display(avaluo, "get_tipo_valuacion_display", "tipo_valuacion")),
+            "Tipo toma",
+            texto(obtener_display(avaluo, "get_tipo_toma_display", "tipo_toma")),
+        ],
     ], [3.2 * cm, 6 * cm, 4 * cm, 6 * cm]))
 
     story.append(Spacer(1, 10))
 
     story.append(Paragraph("Datos del coche", styles["Heading2"]))
+
     story.append(tabla([
         ["Campo", "Valor", "Campo", "Valor"],
-        ["Marca", texto(avaluo.marca_auto), "Modelo", texto(avaluo.modelo)],
-        ["Año", texto(avaluo.anio_modelo), "Versión", texto(avaluo.version)],
-        ["No. Serie", texto(avaluo.serie), "Placas", texto(avaluo.placas)],
-        ["Color", texto(avaluo.color), "KM", texto(avaluo.kilometraje)],
+        [
+            "Marca",
+            texto(getattr(avaluo, "marca_auto", "")),
+            "Modelo",
+            texto(getattr(avaluo, "modelo", "")),
+        ],
+        [
+            "Año",
+            texto(getattr(avaluo, "anio_modelo", "")),
+            "Versión",
+            texto(getattr(avaluo, "version", "")),
+        ],
+        [
+            "No. Serie",
+            texto(getattr(avaluo, "serie", "")),
+            "Placas",
+            texto(getattr(avaluo, "placas", "")),
+        ],
+        [
+            "Color",
+            texto(getattr(avaluo, "color", "")),
+            "KM",
+            texto(getattr(avaluo, "kilometraje", "")),
+        ],
     ], [3.2 * cm, 6 * cm, 4 * cm, 6 * cm]))
 
     story.append(Spacer(1, 10))
 
     story.append(Paragraph("Checklist 100 puntos", styles["Heading2"]))
 
-    checklist = avaluo.checklist_100 or {}
+    checklist = getattr(avaluo, "checklist_100", None) or {}
+
+    if not isinstance(checklist, dict):
+        checklist = {}
 
     data = [["#", "Punto", "Estado"]]
 
@@ -334,12 +775,13 @@ def generar_checklist_pdf(avaluo):
     story.append(Spacer(1, 10))
 
     story.append(Paragraph("Costos", styles["Heading2"]))
+
     story.append(tabla([
         ["Concepto", "Total"],
-        ["Mecánica", moneda(avaluo.costo_mecanica_total)],
-        ["Total reparación", moneda(avaluo.costo_reparacion)],
-        ["Oferta inicial", texto(avaluo.oferta_inicial)],
-        ["Oferta final", texto(avaluo.oferta_final)],
+        ["Mecánica", moneda(getattr(avaluo, "costo_mecanica_total", 0))],
+        ["Total reparación", moneda(getattr(avaluo, "costo_reparacion", 0))],
+        ["Oferta inicial", texto(getattr(avaluo, "oferta_inicial", ""))],
+        ["Oferta final", texto(getattr(avaluo, "oferta_final", ""))],
     ], [8 * cm, 8 * cm]))
 
     story.append(Spacer(1, 25))
@@ -349,7 +791,10 @@ def generar_checklist_pdf(avaluo):
         ["\n\nNombre y firma", "\n\nNombre y firma", "\n\nNombre y firma"],
     ], [6 * cm, 6 * cm, 6 * cm]))
 
-    return pdf_response(story, f"checklist_100_avaluo_{avaluo.id}.pdf")
+    return pdf_response(
+        story,
+        f"checklist_100_avaluo_{obtener_id_avaluo(avaluo)}.pdf",
+    )
 
 
 class AvaluoUsadoViewSet(viewsets.ModelViewSet):
@@ -364,6 +809,7 @@ class AvaluoUsadoViewSet(viewsets.ModelViewSet):
         .all()
         .order_by("-creado")
     )
+
     serializer_class = AvaluoUsadoSerializer
     filter_backends = [OrderingFilter, SearchFilter]
 
@@ -493,7 +939,11 @@ class AvaluoUsadoViewSet(viewsets.ModelViewSet):
 
         avaluo.tecnico_finalizado = True
         avaluo.fecha_tecnico_finalizado = timezone.now()
-        avaluo.save(update_fields=["tecnico_finalizado", "fecha_tecnico_finalizado", "actualizado"])
+        avaluo.save(update_fields=[
+            "tecnico_finalizado",
+            "fecha_tecnico_finalizado",
+            "actualizado",
+        ])
 
         serializer = self.get_serializer(avaluo)
         return Response(serializer.data)
