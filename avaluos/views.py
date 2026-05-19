@@ -998,7 +998,7 @@ def header_checklist_pdf(avaluo, estilos):
 
     bloque_der = [
         Paragraph("100 PUNTOS · CHECKLIST", estilos["titulo_principal"]),
-        Paragraph("Valuación y Certificación de Unidades", estilos["subtitulo_principal"]),
+        Paragraph("de Valuación y Certificación de Unidades", estilos["subtitulo_principal"]),
         Spacer(1, 2),
         Paragraph(
             f"<b>Folio:</b> {obtener_id_avaluo(avaluo)} &nbsp;&nbsp;&nbsp; "
@@ -1110,7 +1110,7 @@ def columna_checklist(secciones, checklist_data, estilos):
             camaro = imagen_camaro_checklist()
 
             if camaro:
-                flowables.append(Spacer(1, 4))
+                flowables.append(Spacer(1, 15))
                 flowables.append(camaro)
 
     return flowables
