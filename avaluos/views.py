@@ -26,6 +26,7 @@ from reportlab.platypus import (
     TableStyle,
     Image,
     PageBreak,
+    KeepInFrame
 )
 
 from usuarios.authentication import SignedUserAuthentication
@@ -696,10 +697,10 @@ def rutas_logos_checklist():
         rutas_base.append(os.path.join(str(base_dir), "media"))
 
     nombres = {
-        "buick": "buick.png",
-        "cadillac": "cadillac.png",
         "chevrolet": "chevrolet.png",
+        "buick": "buick.png",
         "gmc": "GMC.png",
+        "cadillac": "cadillac.png",
     }
 
     resultado = {}
@@ -1277,19 +1278,33 @@ def imagen_camaro_checklist():
     if not ruta:
         return None
 
-    img = Image(ruta)
-
     # Imagen original: 3800 x 900 px
-    # Proporción: 4.22
-    ancho_maximo = 8.7 * cm
+    # Proporción: alto / ancho = 900 / 3800 = 0.2368
+    ancho_maximo = 8.4 * cm
+    alto_maximo = 1.95 * cm
 
-    img.drawWidth = ancho_maximo
-    img.drawHeight = img.drawWidth * (img.imageHeight / img.imageWidth)
+    img = Image(
+        ruta,
+        width=ancho_maximo,
+        height=alto_maximo,
+        kind="proportional",
+    )
+
     img.hAlign = "CENTER"
 
+    contenido_seguro = KeepInFrame(
+        maxWidth=9.1 * cm,
+        maxHeight=2.15 * cm,
+        content=[img],
+        mode="shrink",
+        hAlign="CENTER",
+        vAlign="MIDDLE",
+    )
+
     contenedor = Table(
-        [[img]],
+        [[contenido_seguro]],
         colWidths=[9.7 * cm],
+        rowHeights=[2.25 * cm],
     )
 
     contenedor.setStyle(TableStyle([
@@ -1297,10 +1312,11 @@ def imagen_camaro_checklist():
         ("BACKGROUND", (0, 0), (-1, -1), COLOR_BLANCO),
         ("ALIGN", (0, 0), (-1, -1), "CENTER"),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 4),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-        ("TOPPADDING", (0, 0), (-1, -1), 5),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+
+        ("LEFTPADDING", (0, 0), (-1, -1), 3),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+        ("TOPPADDING", (0, 0), (-1, -1), 3),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
     ]))
 
     return contenedor
