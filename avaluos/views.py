@@ -39,7 +39,7 @@ CHECKLIST_100 = [
     "Costado izquierdo y alineación de puertas",
     "Defensa delantera",
     "Cofre",
-    "Todos cristales",
+    "Toldos",
     "Defensa trasera",
     "Tapa de gasolina",
     "Tapa cajuela / cajuela / bedliner",
@@ -69,9 +69,9 @@ CHECKLIST_100 = [
     "Desempañador trasero",
     "Panel de instrumentos",
     "Asientos traseros / reposacabezas",
-    "Consola / compartimiento delantero trasero",
-    "Presionar botón",
-    "Verificar conectividad de módulo",
+    "Consola / tapa del compartimiento - del / tras",
+    "Onstar presionar botón",
+    "Onstar verificar conectividad de módulo",
     "Escaneo de vehículo",
     "Detectar códigos motor",
     "Sensores",
@@ -87,33 +87,33 @@ CHECKLIST_100 = [
     "Control de crucero",
     "Velocímetro / tacómetro / odómetro",
     "Calentador / aire acondicionado",
-    "Volante telescópico y altura",
+    "Volante de direccion telescópico y de altura",
     "Claxon",
     "Limpiaparabrisas / chisgueteros / plumas",
     "Ajustes de pedales / volante",
-    "Inspección visual bajo cofre",
-    "Calcomanías de marca debajo del cofre",
+    "Inspección visual",
+    "El vehiculo cuenta con las calcomanías de la marca debajo del cofre",
     "Sistema de enfriamiento motor / radiador / mangueras",
     "Sistema de dirección",
     "Sistema eléctrico",
     "Sistema de frenos",
     "Sistema de encendido",
     "Sistema de combustible",
-    "Compresor A/C",
+    "Compresor A/AC",
     "Inspección de filtros",
     "Inspección de mangueras",
     "Inspección bandas",
     "Prueba de batería",
     "Prueba de compresión / fugas / degradación de aceite motor",
-    "Catalizador / sensores de oxígeno / emisiones",
-    "Prueba de eficiencia de A/C",
-    "Visual bajo vehículo",
-    "Marcas de reparación / daños",
+    "Verificar estado de catalizador / sensores de oxígeno / emisiones",
+    "Prueba de eficiencia de A/AC y carga si es necesario",
+    "Visual",
+    "Marco / daños",
     "Pastillas de freno / balatas",
     "Discos / pinzas / calipers / tambores",
     "Freno hidráulico",
     "Neumáticos",
-    "Rueda de acero / aleación originales",
+    "Ruedas de acero / aleación originales segun modelo y version",
     "Amortiguadores",
     "Soportes motor / caja / escape",
     "Dirección / enlace",
@@ -128,14 +128,13 @@ CHECKLIST_100 = [
     "Vehículo es certificable",
     "Fecha de último mantenimiento",
     "Detallado exterior e interior",
-    "Pre-activación completada",
-    "Prueba de estado de salud de batería",
+    "Onstar pre-activación completada",
+    "Prueba de estado de salud de la batería",
     "Realizar campañas abiertas",
     "Cambio de aceite de motor y filtro",
     "Inspeccionar / cambiar filtros",
     "Inspeccionar y poner a nivel todos los fluidos",
 ]
-
 
 COLOR_ORO = colors.HexColor("#C9A75D")
 COLOR_NEGRO = colors.HexColor("#111827")
@@ -1103,6 +1102,13 @@ def columna_checklist(secciones, checklist_data, estilos):
         flowables.append(tabla_items_checklist(numeros, checklist_data, estilos))
         flowables.append(Spacer(1, 4))
 
+        if titulo == "FUNCIONAL EXTERIOR E INTERIOR":
+            camaro = imagen_camaro_checklist()
+
+            if camaro:
+                flowables.append(camaro)
+                flowables.append(Spacer(1, 4))
+
     return flowables
 
 
@@ -1238,6 +1244,67 @@ def firmas_checklist_mejoradas(estilos):
     ]))
 
     return firmas
+
+def ruta_imagen_media(nombre_archivo):
+    rutas_base = []
+
+    media_root = getattr(settings, "MEDIA_ROOT", "")
+    base_dir = getattr(settings, "BASE_DIR", "")
+
+    if media_root:
+        rutas_base.append(str(media_root))
+
+    if base_dir:
+        rutas_base.append(os.path.join(str(base_dir), "media"))
+
+    posibles_rutas = []
+
+    for ruta_base in rutas_base:
+        posibles_rutas.extend([
+            os.path.join(ruta_base, nombre_archivo),
+            os.path.join(ruta_base, "logos", nombre_archivo),
+        ])
+
+    for ruta in posibles_rutas:
+        if os.path.exists(ruta):
+            return ruta
+
+    return None
+
+def imagen_camaro_checklist():
+    ruta = ruta_imagen_media("camaro.png")
+
+    if not ruta:
+        return None
+
+    img = Image(ruta)
+
+    # Imagen original: 3800 x 900 px
+    # Proporción: 4.22
+    ancho_maximo = 9.35 * cm
+
+    img.drawWidth = ancho_maximo
+    img.drawHeight = img.drawWidth * (img.imageHeight / img.imageWidth)
+    img.hAlign = "CENTER"
+
+    contenedor = Table(
+        [[img]],
+        colWidths=[9.7 * cm],
+    )
+
+    contenedor.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 0.35, COLOR_BORDE),
+        ("BACKGROUND", (0, 0), (-1, -1), COLOR_BLANCO),
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+    ]))
+
+    return contenedor
+
 def generar_checklist_pdf(avaluo):
     estilos = estilos_checklist_100()
     story = []
@@ -1255,7 +1322,7 @@ def generar_checklist_pdf(avaluo):
     ]
 
     page1_right = [
-        ("FUNCIONALIDAD / INTERIOR", list(range(24, 39))),
+        ("FUNCIONALIDAD EXTERIOR E INTERIOR", list(range(24, 39))),
         ("PRUEBA DE MANEJO", list(range(39, 58))),
     ]
 
