@@ -700,7 +700,7 @@ def rutas_logos_checklist():
         "buick": "buick.png",
         "cadillac": "cadillac.png",
         "chevrolet": "chevrolet.png",
-        "gmc": "gmc.png",
+        "gmc": "GMC.png",
     }
 
     resultado = {}
