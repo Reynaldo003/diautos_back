@@ -494,7 +494,7 @@ def generar_ticket_pdf(avaluo):
 
     if logo_path:
         logo = Image(logo_path)
-        logo.drawWidth = 6.4 * cm
+        logo.drawWidth = 5.4 * cm
         logo.drawHeight = logo.drawWidth * (logo.imageHeight / logo.imageWidth)
         logo.hAlign = "RIGHT"
 
@@ -529,11 +529,11 @@ def generar_ticket_pdf(avaluo):
         ("ALIGN", (0, 0), (0, 0), "CENTER"),
         ("ALIGN", (1, 0), (1, 0), "RIGHT"),
         ("LINEBELOW", (0, 0), (-1, -1), 1.2, COLOR_ORO),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
     ]))
 
     story.append(header)
-    story.append(Spacer(1, 5))
+    story.append(Spacer(1, 3))
 
     story.append(seccion_ticket("DATOS DE LA SOLICITUD", estilos))
 
@@ -552,7 +552,7 @@ def generar_ticket_pdf(avaluo):
         ],
     ], estilos))
 
-    story.append(Spacer(1, 5))
+    story.append(Spacer(1, 3))
 
     story.append(seccion_ticket("DATOS DEL VEHÍCULO", estilos))
 
@@ -589,7 +589,7 @@ def generar_ticket_pdf(avaluo):
         ],
     ], estilos))
 
-    story.append(Spacer(1, 5))
+    story.append(Spacer(1, 3))
 
     story.append(seccion_ticket("COMENTARIOS / TRABAJO SOLICITADO", estilos))
 
@@ -617,7 +617,7 @@ def generar_ticket_pdf(avaluo):
     ]))
 
     story.append(tabla_comentarios)
-    story.append(Spacer(1, 8))
+    story.append(Spacer(1, 4))
 
     firmas = Table(
         [
@@ -655,7 +655,7 @@ def generar_ticket_pdf(avaluo):
         story,
         f"ticket_avaluo_{obtener_id_avaluo(avaluo)}.pdf",
         pagesize=MEDIA_CARTA_HORIZONTAL,
-        margin=0.7 * cm,
+        margin=0.45 * cm,
         on_page=dibujar_fondo_ticket,
     )
 
