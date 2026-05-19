@@ -1281,7 +1281,7 @@ def imagen_camaro_checklist():
 
     # Imagen original: 3800 x 900 px
     # Proporción: 4.22
-    ancho_maximo = 9.35 * cm
+    ancho_maximo = 8.7 * cm
 
     img.drawWidth = ancho_maximo
     img.drawHeight = img.drawWidth * (img.imageHeight / img.imageWidth)
