@@ -1347,7 +1347,7 @@ def generar_checklist_pdf(avaluo):
     story.append(header_checklist_pdf(avaluo, estilos))
     story.append(Spacer(1, 4))
     story.append(tabla_datos_generales_checklist(avaluo, estilos))
-    story.append(Spacer(1, 5))
+    story.append(Spacer(1, 15))
     story.append(
         bloque_dos_columnas_checklist(
             page1_left,
@@ -1375,7 +1375,7 @@ def generar_checklist_pdf(avaluo):
     ]
 
     story.append(header_checklist_pdf(avaluo, estilos))
-    story.append(Spacer(1, 4))
+    story.append(Spacer(1, 15))
     story.append(
         bloque_dos_columnas_checklist(
             page2_left,
