@@ -1,44 +1,57 @@
 # citas/views.py
+from django.db.models import Q
 from rest_framework.viewsets import ModelViewSet
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import IsAuthenticated
 
 from .models import Cita
-from .serializers import ClienteComercialSerializer, CitaSerializer
-from clientes.models import ClienteComercial
-
-class ClienteComercialViewSet(ModelViewSet):
-    queryset = ClienteComercial.objects.all().order_by("-id_cliente")
-    serializer_class = ClienteComercialSerializer
-    permission_classes = [AllowAny]
-
-    @action(detail=True, methods=["get"])
-    def agenda(self, request, pk=None):
-        cliente = self.get_object()
-
-        citas = Cita.objects.filter(cliente=cliente).order_by(
-            "fecha_hora_cita",
-            "id",
-        )
-
-        data = []
-
-        for cita in citas:
-            data.append({
-                "tipo": "CITA",
-                "id": cita.id,
-                "fecha_hora": cita.fecha_hora_cita,
-                "agencia": cita.agencia,
-                "auto_interes": cita.auto_interes,
-                "asistencia": cita.asistencia,
-                "detalle": CitaSerializer(cita, context={"request": request}).data,
-            })
-
-        return Response(data)
+from .serializers import CitaSerializer
 
 
 class CitasViewSet(ModelViewSet):
-    queryset = Cita.objects.select_related("cliente").all().order_by("-id")
     serializer_class = CitaSerializer
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = (
+            Cita.objects.select_related("cliente")
+            .all()
+            .order_by("-fecha_hora_cita", "-id")
+        )
+
+        q = str(self.request.query_params.get("q", "")).strip()
+        asistencia = str(self.request.query_params.get("asistencia", "")).strip()
+        agencia = str(self.request.query_params.get("agencia", "")).strip()
+        tipo_cita = str(self.request.query_params.get("tipo_cita", "")).strip()
+        fecha_desde = str(self.request.query_params.get("fecha_desde", "")).strip()
+        fecha_hasta = str(self.request.query_params.get("fecha_hasta", "")).strip()
+
+        if q:
+            queryset = queryset.filter(
+                Q(cliente__nombre__icontains=q)
+                | Q(cliente__telefono__icontains=q)
+                | Q(cliente__correo__icontains=q)
+                | Q(agencia__icontains=q)
+                | Q(auto_interes__icontains=q)
+                | Q(tipo_cita__icontains=q)
+                | Q(fuente_prospeccion__icontains=q)
+                | Q(asesor_digital__icontains=q)
+                | Q(asesor_piso__icontains=q)
+                | Q(comentarios__icontains=q)
+            )
+
+        if asistencia in {"true", "false"}:
+            queryset = queryset.filter(asistencia=asistencia == "true")
+
+        if agencia:
+            queryset = queryset.filter(agencia__icontains=agencia)
+
+        if tipo_cita:
+            queryset = queryset.filter(tipo_cita__icontains=tipo_cita)
+
+        if fecha_desde:
+            queryset = queryset.filter(fecha_hora_cita__date__gte=fecha_desde)
+
+        if fecha_hasta:
+            queryset = queryset.filter(fecha_hora_cita__date__lte=fecha_hasta)
+
+        return queryset

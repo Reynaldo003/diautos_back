@@ -15,7 +15,7 @@ urlpatterns = [
     path("api/cartera/", include("cartera.urls")),
     path("encuestas/api/", include("encuestas.urls")),
     path("usados/", include("avaluos.urls")),
-    path("citas/", include("citas.urls")),
+    path("citas/api/", include("citas.urls")),
 ]
 
 if settings.DEBUG:
