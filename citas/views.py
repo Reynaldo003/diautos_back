@@ -3,19 +3,22 @@ from django.db.models import Q
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.permissions import IsAuthenticated
 
+from usuarios.authentication import SignedUserAuthentication
+
 from .models import Cita
 from .serializers import CitaSerializer
 
 
 class CitasViewSet(ModelViewSet):
-    serializer_class = CitaSerializer
+    authentication_classes = [SignedUserAuthentication]
     permission_classes = [IsAuthenticated]
+    serializer_class = CitaSerializer
 
     def get_queryset(self):
         queryset = (
             Cita.objects.select_related("cliente")
             .all()
-            .order_by("-fecha_hora_cita", "-id")
+            .order_by("-id")
         )
 
         q = str(self.request.query_params.get("q", "")).strip()
