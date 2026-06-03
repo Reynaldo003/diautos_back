@@ -1,3 +1,4 @@
+#avaluos/models.py
 from pathlib import Path
 import uuid
 
@@ -87,7 +88,12 @@ class AvaluoUsado(models.Model):
     descripcion = models.TextField(max_length=4000, default="", null=True, blank=True)
     observaciones = models.TextField(max_length=4000, default="", null=True, blank=True)
     comentarios = models.TextField(max_length=4000, default="Valuación", null=True, blank=True)
-
+    comentarios_checklist = models.TextField(
+        max_length=4000,
+        default="",
+        null=True,
+        blank=True,
+    )
     ganador_subasta = models.CharField(max_length=200, default="", null=True, blank=True)
     etapa_proceso = models.CharField(max_length=200, default="", null=True, blank=True)
 

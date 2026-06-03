@@ -1,7 +1,8 @@
+#avaluos/serializers.py
 import json
 import mimetypes
 from decimal import Decimal, InvalidOperation
-
+import re
 from django.db import transaction
 from rest_framework import serializers
 
@@ -251,6 +252,7 @@ class AvaluoUsadoSerializer(BaseClienteComercialSerializer):
             "descripcion",
             "observaciones",
             "comentarios",
+            "comentarios_checklist",
 
             "ganador_subasta",
             "etapa_proceso",
@@ -468,21 +470,78 @@ class AvaluoUsadoSerializer(BaseClienteComercialSerializer):
                 "checklist_100_json": "El checklist debe ser un objeto JSON."
             })
 
-        permitidos = {
-            "",
+        estados_generales = {
             "inspeccion_realizada",
             "requiere_servicio",
             "servicio_realizado",
             "na",
+        }
+
+        estados_historial = {
             "si",
             "no",
+            "na",
+        }
+
+        estados_certificacion = {
+            "si_realizado",
+            "no_realizado",
+            "na",
         }
 
         limpio = {}
 
+        def limpiar_medida(valor):
+            return str(valor or "").strip().replace(",", ".")
+
+        def normalizar_estado(numero_int, estado):
+            estado = str(estado or "").strip().lower()
+
+            if not estado:
+                return ""
+
+            # Compatibilidad con datos anteriores.
+            if numero_int in (90, 91, 92):
+                mapa_legacy = {
+                    "inspeccion_realizada": "si",
+                    "servicio_realizado": "si",
+                    "requiere_servicio": "no",
+                }
+                estado = mapa_legacy.get(estado, estado)
+
+                if estado not in estados_historial:
+                    raise serializers.ValidationError({
+                        "checklist_100_json": f"Estado inválido en punto {numero_int}. Use si, no o na."
+                    })
+
+                return estado
+
+            if 94 <= numero_int <= 100:
+                mapa_legacy = {
+                    "inspeccion_realizada": "si_realizado",
+                    "servicio_realizado": "si_realizado",
+                    "requiere_servicio": "no_realizado",
+                    "si": "si_realizado",
+                    "no": "no_realizado",
+                }
+                estado = mapa_legacy.get(estado, estado)
+
+                if estado not in estados_certificacion:
+                    raise serializers.ValidationError({
+                        "checklist_100_json": f"Estado inválido en punto {numero_int}. Use si_realizado, no_realizado o na."
+                    })
+
+                return estado
+
+            if estado not in estados_generales:
+                raise serializers.ValidationError({
+                    "checklist_100_json": f"Estado inválido en punto {numero_int}."
+                })
+
+            return estado
+
         for key, value in raw_checklist.items():
             numero = str(key).strip()
-            estado = str(value or "").strip().lower()
 
             if not numero.isdigit():
                 continue
@@ -492,10 +551,64 @@ class AvaluoUsadoSerializer(BaseClienteComercialSerializer):
             if numero_int < 1 or numero_int > 100:
                 continue
 
-            if estado not in permitidos:
-                raise serializers.ValidationError({
-                    "checklist_100_json": "Estado inválido en checklist."
-                })
+            # Punto 93: fecha de último mantenimiento.
+            if numero_int == 93:
+                fecha = ""
+
+                if isinstance(value, dict):
+                    fecha = str(value.get("fecha") or "").strip()
+                else:
+                    fecha = str(value or "").strip()
+
+                if not fecha:
+                    continue
+
+                if not re.match(r"^\d{4}-\d{2}-\d{2}$", fecha):
+                    raise serializers.ValidationError({
+                        "checklist_100_json": "El punto 93 debe tener formato de fecha YYYY-MM-DD."
+                    })
+
+                limpio[str(numero_int)] = fecha
+                continue
+
+            # Puntos 76 y 79: estado + espesor DD, ID, IT, DT.
+            if numero_int in (76, 79):
+                if isinstance(value, dict):
+                    estado = normalizar_estado(numero_int, value.get("estado"))
+                    dd = limpiar_medida(value.get("dd"))
+                    id_ = limpiar_medida(value.get("id"))
+                    it = limpiar_medida(value.get("it"))
+                    dt = limpiar_medida(value.get("dt"))
+
+                    if estado or dd or id_ or it or dt:
+                        limpio[str(numero_int)] = {
+                            "estado": estado,
+                            "dd": dd,
+                            "id": id_,
+                            "it": it,
+                            "dt": dt,
+                        }
+
+                    continue
+
+                estado = normalizar_estado(numero_int, value)
+
+                if estado:
+                    limpio[str(numero_int)] = {
+                        "estado": estado,
+                        "dd": "",
+                        "id": "",
+                        "it": "",
+                        "dt": "",
+                    }
+
+                continue
+
+            # Resto de puntos.
+            if isinstance(value, dict):
+                estado = normalizar_estado(numero_int, value.get("estado"))
+            else:
+                estado = normalizar_estado(numero_int, value)
 
             if estado:
                 limpio[str(numero_int)] = estado
@@ -737,6 +850,7 @@ class AvaluoUsadoSerializer(BaseClienteComercialSerializer):
             "descripcion",
             "observaciones",
             "comentarios",
+            "comentarios_checklist",
             "ganador_subasta",
             "etapa_proceso",
         ]
@@ -746,9 +860,7 @@ class AvaluoUsadoSerializer(BaseClienteComercialSerializer):
                 setattr(instance, campo, validated_data[campo])
 
         if checklist_recibido:
-            checklist_actual = dict(instance.checklist_100 or {})
-            checklist_actual.update(checklist_100)
-            instance.checklist_100 = checklist_actual
+            instance.checklist_100 = checklist_100
 
         instance.save()
 

@@ -1,3 +1,4 @@
+#avaluos/views.py
 import os
 from io import BytesIO
 from decimal import Decimal
@@ -249,6 +250,9 @@ def obtener_display(objeto, nombre_metodo, nombre_campo):
 
 
 def estado_checklist(valor):
+    if isinstance(valor, dict):
+        valor = valor.get("estado", "")
+
     mapa = {
         "inspeccion_realizada": "Inspección realizada",
         "requiere_servicio": "Requiere servicio",
@@ -256,10 +260,11 @@ def estado_checklist(valor):
         "na": "N/A",
         "si": "Sí",
         "no": "No",
+        "si_realizado": "Sí realizado",
+        "no_realizado": "No realizado",
     }
 
     return mapa.get(str(valor or "").strip().lower(), "")
-
 
 def pdf_response(story, filename, pagesize=letter, margin=1.2 * cm, on_page=None):
     buffer = BytesIO()
@@ -596,7 +601,7 @@ def generar_ticket_pdf(avaluo):
 
     story.append(Spacer(1, 3))
 
-    story.append(seccion_ticket("COMENTARIOS / TRABAJO SOLICITADO", estilos))
+    story.append(seccion_ticket("COMENTARIOS", estilos))
 
     comentarios = (
         getattr(avaluo, "comentarios", "")
@@ -924,21 +929,116 @@ def estado_color(valor):
 
     return COLOR_GRIS_CLARO
 
+def valor_checklist(checklist_data, numero):
+    return checklist_data.get(str(numero), "")
+
+
+def estado_desde_valor_checklist(valor):
+    if isinstance(valor, dict):
+        return str(valor.get("estado") or "").strip().lower()
+
+    return str(valor or "").strip().lower()
+
+
+def fecha_desde_valor_checklist(valor):
+    if isinstance(valor, dict):
+        return str(valor.get("fecha") or "").strip()
+
+    return str(valor or "").strip()
+
+
+def medida_desde_valor_checklist(valor, campo):
+    if not isinstance(valor, dict):
+        return ""
+
+    return str(valor.get(campo) or "").strip()
+
+
+def estado_corto_por_numero(valor, numero):
+    estado = estado_desde_valor_checklist(valor)
+
+    if numero in (90, 91, 92):
+        mapa = {
+            "si": "SÍ",
+            "no": "NO",
+            "na": "N/A",
+        }
+        return mapa.get(estado, "—")
+
+    if 94 <= numero <= 100:
+        mapa = {
+            "si_realizado": "SÍ REAL.",
+            "no_realizado": "NO REAL.",
+            "na": "N/A",
+        }
+        return mapa.get(estado, "—")
+
+    mapa = {
+        "inspeccion_realizada": "INSP.",
+        "requiere_servicio": "REQ.",
+        "servicio_realizado": "REAL.",
+        "na": "N/A",
+    }
+
+    return mapa.get(estado, "—")
+
+
+def color_estado_checklist(valor):
+    estado = estado_desde_valor_checklist(valor)
+
+    if estado in ("inspeccion_realizada", "si", "si_realizado"):
+        return colors.HexColor("#D1FAE5")
+
+    if estado in ("requiere_servicio", "no", "no_realizado"):
+        return colors.HexColor("#FEE2E2")
+
+    if estado == "servicio_realizado":
+        return colors.HexColor("#DBEAFE")
+
+    if estado == "na":
+        return colors.HexColor("#E5E7EB")
+
+    return COLOR_GRIS_CLARO
+
+
+def descripcion_item_checklist(numero, descripcion, valor):
+    if numero == 93:
+        fecha = fecha_desde_valor_checklist(valor)
+        extra = f"<br/><b>Fecha:</b> {escape(fecha)}" if fecha else "<br/><b>Fecha:</b> __________"
+        return f"<b>{numero}.</b> {escape(descripcion)}{extra}"
+
+    if numero in (76, 79):
+        dd = medida_desde_valor_checklist(valor, "dd")
+        id_ = medida_desde_valor_checklist(valor, "id")
+        it = medida_desde_valor_checklist(valor, "it")
+        dt = medida_desde_valor_checklist(valor, "dt")
+
+        extra = (
+            "<br/><b>De espesor:</b> "
+            f"DD {escape(dd) or '____'} &nbsp;&nbsp; "
+            f"ID {escape(id_) or '____'} &nbsp;&nbsp; "
+            f"IT {escape(it) or '____'} &nbsp;&nbsp; "
+            f"DT {escape(dt) or '____'} mm"
+        )
+
+        return f"<b>{numero}.</b> {escape(descripcion)}{extra}"
+
+    return f"<b>{numero}.</b> {escape(descripcion)}"
 
 def tabla_items_checklist(numeros, checklist_data, estilos, ancho_cm=9.7):
     rows = []
 
     for numero in numeros:
         descripcion = CHECKLIST_100[numero - 1]
-        estado = checklist_data.get(str(numero), "")
+        valor = valor_checklist(checklist_data, numero)
 
         texto_item = Paragraph(
-            f"<b>{numero}.</b> {escape(descripcion)}",
+            descripcion_item_checklist(numero, descripcion, valor),
             estilos["item"],
         )
 
         texto_estado = Paragraph(
-            estado_corto(estado),
+            estado_corto_por_numero(valor, numero),
             estilos["estado"],
         )
 
@@ -961,12 +1061,11 @@ def tabla_items_checklist(numeros, checklist_data, estilos, ancho_cm=9.7):
     ]
 
     for i, numero in enumerate(numeros):
-        estado = checklist_data.get(str(numero), "")
-        style_cmds.append(("BACKGROUND", (1, i), (1, i), estado_color(estado)))
+        valor = valor_checklist(checklist_data, numero)
+        style_cmds.append(("BACKGROUND", (1, i), (1, i), color_estado_checklist(valor)))
 
     t.setStyle(TableStyle(style_cmds))
     return t
-
 
 def header_checklist_pdf(avaluo, estilos):
     logos = rutas_logos_checklist()
@@ -1161,17 +1260,14 @@ def resumen_valores_checklist(avaluo, estilos):
 
     return t
 
-
 def caja_comentarios_checklist(avaluo, estilos):
     comentarios = recortar_texto(
         (
-            getattr(avaluo, "comentarios", "")
-            or getattr(avaluo, "observaciones", "")
-            or getattr(avaluo, "descripcion", "")
-            or "Sin comentarios."
+            getattr(avaluo, "comentarios_checklist", "")
+            or "Sin comentarios técnicos."
         ),
         limite=500,
-        default="Sin comentarios.",
+        default="Sin comentarios técnicos.",
     )
 
     t = Table(
@@ -1190,7 +1286,6 @@ def caja_comentarios_checklist(avaluo, estilos):
     ]))
 
     return t
-
 
 def bloque_resumen_final_checklist(avaluo, estilos):
     izquierda = [

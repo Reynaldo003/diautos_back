@@ -5,6 +5,7 @@ class EncuestaServicio(models.Model):
     id_encuesta = models.AutoField(primary_key=True)
     creado = models.DateTimeField(auto_now_add=True)
     numero_OS = models.CharField(max_length=200, blank=True, default="")
+    asesor = models.CharField(max_length=200, blank=True, default="")
     satisfaccion_agendar_cita = models.IntegerField(blank=True, default=0)
     satisfaccion_exp_area_servicio = models.IntegerField(blank=True, default=0)
     mostraron_inventario_inicial_vehiculo = models.BooleanField(default=False)
