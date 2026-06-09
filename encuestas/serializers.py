@@ -1,6 +1,6 @@
+# encuestas/serializers.py
 from rest_framework import serializers
 from .models import EncuestaServicio
-
 
 class EncuestaServicioSerializer(serializers.ModelSerializer):
     class Meta:
@@ -9,6 +9,7 @@ class EncuestaServicioSerializer(serializers.ModelSerializer):
             "id_encuesta",
             "creado",
             "numero_OS",
+            "asesor",
             "satisfaccion_agendar_cita",
             "satisfaccion_exp_area_servicio",
             "mostraron_inventario_inicial_vehiculo",
@@ -36,7 +37,7 @@ class EncuestaServicioSerializer(serializers.ModelSerializer):
 
             try:
                 valor_entero = int(valor)
-            except ValueError:
+            except (ValueError, TypeError):
                 raise serializers.ValidationError({
                     campo: "Debe ser un número entre 1 y 5."
                 })
@@ -49,6 +50,7 @@ class EncuestaServicioSerializer(serializers.ModelSerializer):
             attrs[campo] = valor_entero
 
         attrs["numero_OS"] = (attrs.get("numero_OS") or "").strip()
+        attrs["asesor"] = (attrs.get("asesor") or "").strip()
         attrs["comentario"] = (attrs.get("comentario") or "").strip()
 
         if not attrs["numero_OS"]:
