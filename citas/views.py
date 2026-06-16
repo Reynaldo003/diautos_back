@@ -10,7 +10,7 @@ from .serializers import CitaSerializer, CitaListSerializer
 
 
 class CitasPagination(PageNumberPagination):
-    page_size = 50                    # 50 por página, no 500 de un golpe
+    page_size = 50                   
     page_size_query_param = "page_size"
     max_page_size = 200
 
@@ -21,24 +21,24 @@ class CitasViewSet(ModelViewSet):
     pagination_class = CitasPagination
 
     def get_serializer_class(self):
-        # Lista → serializer ligero. Detalle/crear/editar → completo
+    
         if self.action == "list":
             return CitaListSerializer
         return CitaSerializer
 
     def get_queryset(self):
-        # Solo los campos que necesita la lista
+     
         queryset = (
             Cita.objects.select_related("cliente")
             .only(
                 "id", "agencia", "auto_interes", "fecha_hora_cita",
                 "asistencia", "tipo_cita", "fuente_prospeccion",
                 "asesor_digital", "asesor_piso",
-                "estado_gestion",           # ← AGREGADO (si no estaba)
-                "detalle_gestion",          # ← NUEVO CAMPO
-                "comentarios",              # ← si lo necesitas en lista
-                # campos del cliente que usa el serializer
-                "cliente__id", "cliente__nombre",
+                "estado_gestion",         
+                "detalle_gestion",         
+                "comentarios",             
+               
+                "cliente__pk", "cliente__nombre",
                 "cliente__telefono", "cliente__correo",
             )
             .order_by("-id")
@@ -59,14 +59,14 @@ class CitasViewSet(ModelViewSet):
                 | Q(auto_interes__icontains=q)
                 | Q(tipo_cita__icontains=q)
                 | Q(asesor_piso__icontains=q)
-                # quitamos los menos buscados para reducir carga
+              
             )
 
         if asistencia in {"true", "false"}:
             queryset = queryset.filter(asistencia=asistencia == "true")
 
         if agencia:
-            queryset = queryset.filter(agencia__iexact=agencia)  # iexact > icontains cuando es valor exacto
+            queryset = queryset.filter(agencia__iexact=agencia) 
 
         if tipo_cita:
             queryset = queryset.filter(tipo_cita__iexact=tipo_cita)
