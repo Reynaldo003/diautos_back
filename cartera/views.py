@@ -299,8 +299,19 @@ class CarteraClienteViewSet(viewsets.ModelViewSet):
         return queryset
 
     def partial_update(self, request, *args, **kwargs):
+        """
+        PATCH /api/cartera/clientes/{id}/
+        Acepta:
+          - estado_gestion: texto libre (tipificación de actividad del frontend)
+          - detalle_gestion: texto libre (estatus del perfil, opcional)
+
+        Ya no valida contra choices fijos porque el frontend usa tipificaciones
+        largas definidas en ESTADOS_GESTION (Cartera.jsx).
+        """
         instancia = self.get_object()
-        estado_gestion = request.data.get("estado_gestion")
+
+        estado_gestion = limpiar_texto(request.data.get("estado_gestion", ""))
+        detalle_gestion = limpiar_texto(request.data.get("detalle_gestion", ""))
 
         if not estado_gestion:
             return Response(
@@ -308,18 +319,13 @@ class CarteraClienteViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        estados_validos = [
-            opcion[0] for opcion in CarteraCliente.EstadoGestion.choices
-        ]
-
-        if estado_gestion not in estados_validos:
-            return Response(
-                {"detail": "Estado de gestión inválido."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        campos_a_actualizar = ["estado_gestion", "actualizado_en"]
 
         instancia.estado_gestion = estado_gestion
-        instancia.save(update_fields=["estado_gestion", "actualizado_en"])
+        instancia.detalle_gestion = detalle_gestion
+        campos_a_actualizar.append("detalle_gestion")
+
+        instancia.save(update_fields=campos_a_actualizar)
 
         return Response(CarteraClienteSerializer(instancia).data)
 
@@ -347,15 +353,15 @@ class CarteraClienteViewSet(viewsets.ModelViewSet):
         conteos = queryset.aggregate(
             total=Count("id"),
             pendientes=Count(Case(
-                When(estado_gestion=CarteraCliente.EstadoGestion.PENDIENTE, then=1),
+                When(estado_gestion="PENDIENTE", then=1),
                 output_field=IntegerField(),
             )),
             contactados=Count(Case(
-                When(estado_gestion=CarteraCliente.EstadoGestion.CONTACTADO, then=1),
+                When(estado_gestion__icontains="contactado", then=1),
                 output_field=IntegerField(),
             )),
             citas=Count(Case(
-                When(estado_gestion=CarteraCliente.EstadoGestion.CITA_AGENDADA, then=1),
+                When(estado_gestion__icontains="cita", then=1),
                 output_field=IntegerField(),
             )),
         )
@@ -421,6 +427,7 @@ class CarteraClienteViewSet(viewsets.ModelViewSet):
                 "modelo": obtener_modelo_desde_version(venta.version),
                 "version": venta.version,
                 "meses_actual_a_venta": venta.meses_actual_a_venta,
+                "estado_cliente": venta.estado_cliente,
                 "celular": venta.celular,
                 "telefono": venta.telefono,
                 "email": venta.email,

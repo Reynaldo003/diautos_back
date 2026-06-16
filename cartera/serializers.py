@@ -62,14 +62,27 @@ class CarteraClienteSerializer(serializers.ModelSerializer):
             "kilometraje",
             "asesor_id",
             "asesor_nombre",
-            "estado_gestion",
+            # ── Campos de gestión BDC ─────────────────────────────────────
+            "estado_gestion",    # tipificación de actividad
+            "detalle_gestion",   # estatus del perfil (autocompleta en front)
+            # ─────────────────────────────────────────────────────────────
             "asignado_en",
             "actualizado_en",
             "creado_por_nombre",
             "origen",
             "activo",
         ]
-        read_only_fields = fields
+        # Todos los campos son read_only excepto los de gestión BDC,
+        # que se actualizan vía PATCH desde el frontend.
+        read_only_fields = [
+            "id", "venta_id", "vin", "nombre_cliente", "telefono", "celular",
+            "email", "marca_vehiculo", "modelo", "version", "ano_modelo",
+            "fecha_venta", "folio_factura", "vendedor", "fecha_os", "id_os",
+            "asesor_servicio", "estado_cliente", "dias_os_a_actual",
+            "meses_actual_a_venta", "franja_retencion", "prioridad_prospeccion",
+            "kilometraje", "asesor_id", "asesor_nombre", "asignado_en",
+            "actualizado_en", "creado_por_nombre", "origen", "activo",
+        ]
 
     def get_asesor_nombre(self, obj):
         a = obj.asesor_asignado

@@ -5,13 +5,14 @@ from usuarios.models import Usuario
 
 
 class CarteraCliente(models.Model):
-    class EstadoGestion(models.TextChoices):
-        PENDIENTE = "PENDIENTE", "Pendiente"
-        CONTACTADO = "CONTACTADO", "Contactado"
-        CITA_AGENDADA = "CITA_AGENDADA", "Cita agendada"
-        NO_CONTACTADO = "NO_CONTACTADO", "No contactado"
-        NO_INTERESADO = "NO_INTERESADO", "No interesado"
-        CERRADO = "CERRADO", "Cerrado"
+    """
+    NOTA: Se eliminaron los choices fijos de EstadoGestion porque el frontend
+    maneja tipificaciones largas como "Cliente solicita agendar cita Proactiva",
+    "Nadie contesta", etc. que no caben en los choices originales.
+    El campo ahora es texto libre con max_length=255.
+    Se agregó detalle_gestion para el "Estatus del perfil" que se autocompleta
+    en el frontend según la tipificación elegida.
+    """
 
     id = models.BigAutoField(primary_key=True)
 
@@ -57,12 +58,25 @@ class CarteraCliente(models.Model):
         related_name="cartera_clientes_asignados",
     )
 
+    # ── Gestión BDC ───────────────────────────────────────────────────────────
+    # estado_gestion: tipificación de actividad (texto libre, valores definidos
+    # en el frontend en ESTADOS_GESTION).
+    # Ejemplos: "Nadie contesta", "Cliente solicita agendar cita Proactiva", etc.
     estado_gestion = models.CharField(
-        max_length=30,
-        choices=EstadoGestion.choices,
-        default=EstadoGestion.PENDIENTE,
+        max_length=255,
+        default="PENDIENTE",
+        blank=True,
         db_index=True,
     )
+
+    # detalle_gestion: estatus del perfil del cliente, se autocompleta según
+    # el mapeo MAPEO_ESTADO_A_DETALLE del frontend.
+    # Ejemplos: "Cliente sin contacto", "Cliente Contactado con Cita Agendada", etc.
+    detalle_gestion = models.TextField(
+        blank=True,
+        default="",
+    )
+    # ─────────────────────────────────────────────────────────────────────────
 
     asignado_en = models.DateTimeField(auto_now_add=True)
     actualizado_en = models.DateTimeField(auto_now=True)
