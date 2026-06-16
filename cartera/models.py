@@ -101,7 +101,7 @@ class CarteraCliente(models.Model):
             models.Index(fields=["fecha_venta"]),
             models.Index(fields=["ano_modelo", "modelo"]),
             models.Index(fields=["meses_actual_a_venta"]),
-            models.Index(fields=["-asignado_en"]),
+            models.Index(fields=["asignado_en"]),
             models.Index(
                 fields=["activo", "vin_normalizado"],
                 name="idx_cartera_activo_vin",
