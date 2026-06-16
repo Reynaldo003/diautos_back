@@ -38,7 +38,7 @@ class CitasViewSet(ModelViewSet):
                 "detalle_gestion",         
                 "comentarios",             
                
-                "cliente__pk", "cliente__nombre",
+                "cliente__id_cliente", "cliente__nombre",
                 "cliente__telefono", "cliente__correo",
             )
             .order_by("-id")
